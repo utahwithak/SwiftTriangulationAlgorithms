@@ -1,3 +1,3 @@
-# TriangulationAlgorithms
+# Triangulation Algorithms
 
-A description of this package.
+A collection of triangulation algorithms
