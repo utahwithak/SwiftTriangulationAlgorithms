@@ -87,7 +87,7 @@ class Mesh {
 //        triangles.removeAll(where: { $0 === triangle })
     }
     func removeAllDeadTriangles() {
-        triangles.removeAll { $0.isDead }
+//        triangles.removeAll { $0.isDead }
     }
     func killSubseg(subseg: Subsegment) {
         subseg.kill()
