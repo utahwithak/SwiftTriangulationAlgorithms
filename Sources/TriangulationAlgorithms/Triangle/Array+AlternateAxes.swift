@@ -8,8 +8,8 @@
 
 import Foundation
 
-extension Array where Element == Vector2 {
-    func alteratedAxes<T: RandomNumberGenerator>(generator: inout T, dwyer: Bool) -> [Vector2] {
+extension Array where Element: Vector2 {
+    func alteratedAxes<T: RandomNumberGenerator>(generator: inout T, dwyer: Bool) -> [Element] {
         var copy = self
         /* Discard duplicate vertices, which can really mess up the algorithm. */
         var i = 0
@@ -39,7 +39,7 @@ extension Array where Element == Vector2 {
         return copy
     }
 
-    private mutating func alternateAxes<T: RandomNumberGenerator>(at start: Int, arraysize: Int, axis axisIn: Int, generator: inout T) {
+    mutating func alternateAxes<T: RandomNumberGenerator>(at start: Int, arraysize: Int, axis axisIn: Int, generator: inout T) {
         var divider = 0
         var axis = axisIn
         divider = arraysize >> 1
@@ -62,7 +62,7 @@ extension Array where Element == Vector2 {
         }
     }
 
-    private mutating func vertexMedianX<T: RandomNumberGenerator>(at start: Int, arraysize: Int, median: Int, generator: inout T) {
+    mutating func vertexMedianX<T: RandomNumberGenerator>(at start: Int, arraysize: Int, median: Int, generator: inout T) {
 
         if count == 2 {
             let startVert = self[start]
@@ -115,7 +115,7 @@ extension Array where Element == Vector2 {
         }
     }
 
-    private mutating func vertexMedianY<T: RandomNumberGenerator>(at start: Int, arraysize: Int, median: Int, generator: inout T) {
+    mutating func vertexMedianY<T: RandomNumberGenerator>(at start: Int, arraysize: Int, median: Int, generator: inout T) {
 
         if self.count == 2 {
             let startVert = self[start]

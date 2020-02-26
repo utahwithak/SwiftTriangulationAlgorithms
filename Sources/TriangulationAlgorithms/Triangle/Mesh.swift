@@ -107,7 +107,7 @@ class Mesh {
     }
 
     func createVertex(x: REAL, y: REAL, z: REAL = 0) -> Vertex {
-        let newVertex = Vertex(x: x, y: y, z: z)
+        let newVertex = Vertex(id: vertices.count, x: x, y: y, z: z)
         vertices.append(newVertex)
         return newVertex
     }

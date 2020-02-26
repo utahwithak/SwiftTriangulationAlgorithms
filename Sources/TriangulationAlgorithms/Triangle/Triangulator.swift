@@ -15,12 +15,10 @@ let minus1mod3 = [2, 0, 1]
 
 public class Triangulator {
 
-    private static var randomseed = 1
     private static let SAMPLEFACTOR = 11
-
+    static var generator = Xoshiro(seed: (0, 142, 4325, 524214))
     private static func randomnation( choices: Int) -> Int {
-        randomseed = (randomseed * 1366 + 150889) % 714025
-        return randomseed / (714025 / choices + 1)
+        return Int.random(in: 0..<choices, using: &generator)
     }
 
     public static func triangulate(b: Behavior, inArgs: TriangulateIO) -> TriangulateIO {
@@ -223,45 +221,87 @@ public class Triangulator {
         guard m.invertices >= 3 else {
             fatalError("Error:  Input must have at least three input vertices.")
         }
+        if b.verbose {
+            print("  Sorting vertices.")
+        }
 
+        var generator = Xoshiro(seed: (0, 142, 4325, 524214))
         //        if m.nextras == 0 {
         //            b.weighted = false
         //        }
+        struct SortVec: Vector2 {
+            var x: CGFloat { vec.x }
+            var y: CGFloat { vec.y }
+            let id: Int
+            let vec: Vector2
+        }
 
-        for i in 0..<m.invertices {
-            let x = pointlist[i].x
-            let y = pointlist[i].y
-            let z: REAL
-            if numberofpointattribs == 1 {
-                z = attributes[i]
+        m.vertices = pointlist.enumerated().map({SortVec(id: $0.offset, vec: $0.element) }).sorted(by: {  lhs, rhs in
+            if lhs.vec.x < rhs.vec.x {
+                return true
+            } else if lhs.vec.x > rhs.vec.x {
+                return false
             } else {
-                z = 0
-            }
-            if numberofpointattribs > 1 {
-                print("THIS NEEDS TO BE FIXED!!!!!!")
+                return lhs.vec.y < rhs.vec.y
             }
 
-            let vert = Vertex(x: x, y: y, z: z)
-            m.vertices.append(vert)
+        }).alteratedAxes(generator: &generator, dwyer: b.dwyer).enumerated().map({ i, sortVec in
+
+            let vert = Vertex(id: sortVec.id, x: sortVec.x, y: sortVec.y, z: 0)
+
             if !markerList.isEmpty {
-                vert.mark = markerList[i]
+                vert.mark = markerList[vert.id]
             } else {
                 vert.mark = 0
             }
-            vert.state = .input
 
             if i == 0 {
-                m.xmax = x
-                m.xmin = x
-                m.ymin = y
-                m.ymax = y
+                m.xmax = vert.x
+                m.xmin = vert.x
+                m.ymin = vert.y
+                m.ymax = vert.y
             } else {
-                m.xmin = min(m.xmin, x)
-                m.xmax = max(m.xmax, x)
-                m.ymin = min(m.ymin, y)
-                m.ymax = max(m.ymax, y)
+                m.xmin = min(m.xmin, vert.x)
+                m.xmax = max(m.xmax, vert.x)
+                m.ymin = min(m.ymin, vert.y)
+                m.ymax = max(m.ymax, vert.y)
             }
-        }
+            return vert
+        })
+//        for i in 0..<m.invertices {
+//             let x = pointlist[i].x
+//             let y = pointlist[i].y
+//             let z: REAL
+//             if numberofpointattribs == 1 {
+//                 z = attributes[i]
+//             } else {
+//                 z = 0
+//             }
+//             if numberofpointattribs > 1 {
+//                 print("THIS NEEDS TO BE FIXED!!!!!!")
+//             }
+//
+//             let vert = Vertex(x: x, y: y, z: z)
+//             m.vertices.append(vert)
+//             if !markerList.isEmpty {
+//                 vert.mark = markerList[i]
+//             } else {
+//                 vert.mark = 0
+//             }
+//             vert.state = .input
+//
+//             if i == 0 {
+//                 m.xmax = x
+//                 m.xmin = x
+//                 m.ymin = y
+//                 m.ymax = y
+//             } else {
+//                 m.xmin = min(m.xmin, x)
+//                 m.xmax = max(m.xmax, x)
+//                 m.ymin = min(m.ymin, y)
+//                 m.ymax = max(m.ymax, y)
+//             }
+//         }
     }
 
     private static func delaunay(m: Mesh, b: Behavior) -> Int {
@@ -354,6 +394,12 @@ public class Triangulator {
 
         if b.verbose {
             print("  Forming triangulation.")
+        }
+
+        for i in 0..<m.vertices.count {
+            if sortarray[i] !== m.vertices[i] {
+                print("FAIL!")
+            }
         }
 
         /* Form the Delaunay triangulation. */
@@ -1117,8 +1163,8 @@ public class Triangulator {
                     }
                 } else {
                     /* Find the vertices numbered `end1' and `end2'. */
-                    let endpoint1 = m.vertices[end1]
-                    let endpoint2 = m.vertices[end2]
+                    let endpoint1 = m.vertices.first(where: { $0.id == end1 })!
+                    let endpoint2 = m.vertices.first(where: { $0.id == end2 })!
                     if (endpoint1.x == endpoint2.x) && (endpoint1.y == endpoint2.y) {
                         if !b.quiet {
                             print("Warning:  Endpoints of segment \(i) are coincident in %s.")
@@ -2746,7 +2792,7 @@ public class Triangulator {
                     /*   falls within the starting triangle.                      */
                     let searchorg = searchtri.org!
                     let searchdest = searchtri.dest!
-                    let tmpVert = Vertex(x: vert.x, y: vert.y, z: 0)
+                    let tmpVert = Vertex(id: -1, x: vert.x, y: vert.y, z: 0)
                     if counterclockwise(m: m, b: b, pa: searchorg, pb: searchdest, pc: tmpVert) > 0.0 {
                         /* Find a triangle that contains the hole. */
                         let intersect = locate(m: m, b: b, searchpoint: tmpVert, searchtri: searchtri)

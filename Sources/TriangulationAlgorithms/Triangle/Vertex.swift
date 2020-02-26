@@ -8,7 +8,7 @@
 
 import Foundation
 
-class Vertex {
+class Vertex: Vector2 {
     enum State {
         case input
         case segment
@@ -24,8 +24,10 @@ class Vertex {
     var state: Vertex.State = .input
 
     var triangle: Triangle.EncodedTriangle?
+    let id: Int
 
-    init(x: REAL, y: REAL, z: REAL) {
+    init(id: Int, x: REAL, y: REAL, z: REAL) {
+        self.id = id
         self.x = x
         self.y = y
         self.z = z
