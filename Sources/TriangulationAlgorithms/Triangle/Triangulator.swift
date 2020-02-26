@@ -294,10 +294,10 @@ public class Triangulator {
             m.dummysub.adj1 = EncodedSubsegment(ss: m.dummysub, orientation: 0)
             m.dummysub.adj2 = EncodedSubsegment(ss: m.dummysub, orientation: 0)
 
-            m.dummysub.v1 = nil
-            m.dummysub.v2 = nil
-            m.dummysub.v3 = nil
-            m.dummysub.v4 = nil
+            m.dummysub.v1 = -1
+            m.dummysub.v2 = -1
+            m.dummysub.v3 = -1
+            m.dummysub.v4 = -1
 
             m.dummysub.t1 = OrientedTriangle(triangle: m.dummytri, orientation: 0)
             m.dummysub.t2 = OrientedTriangle(triangle: m.dummytri, orientation: 0)
@@ -363,133 +363,6 @@ public class Triangulator {
         } while !disolveedge.otriEquals(other: startghost)
         m.removeAllDeadTriangles()
         return hullsize
-    }
-
-    private func alternateAxes(at start: Int, arraysize: Int, axis axisIn: Int) {
-        var divider = 0
-        var axis = axisIn
-        divider = arraysize >> 1
-        if arraysize <= 3 {
-            axis = 0
-        }
-        /* Partition with a horizontal or vertical cut. */
-        if axis == 0 {
-            vertexMedianX(at: start, arraysize: arraysize, median: divider)
-        } else {
-            vertexMedianY(at: start, arraysize: arraysize, median: divider)
-        }
-
-        /* Recursively partition the subsets with a cross cut. */
-        if arraysize - divider >= 2 {
-            if divider >= 2 {
-                alternateAxes(at: start, arraysize: divider, axis: 1 - axis)
-            }
-            alternateAxes(at: start + divider, arraysize: arraysize - divider, axis: 1 - axis)
-        }
-    }
-
-    private func vertexMedianX(at start: Int, arraysize: Int, median: Int) {
-
-        if m.vertices.count == 2 {
-            let startVert = m.vertices[start]
-            let nextVert = m.vertices[start + 1]
-            /* Recursive base case. */
-            if (startVert.x > nextVert.x) ||
-                ((startVert.x == nextVert.x) &&
-                    (startVert.y > nextVert.y)) {
-                m.vertices[start + 1] = startVert
-                m.vertices[start] = nextVert
-            }
-            return
-        }
-        /* Choose a random pivot to split the array. */
-        let pivot = randomnation(choices: arraysize)
-        let pivot1 = m.vertices[start + pivot].x
-        let pivot2 = m.vertices[start + pivot].y
-        /* Split the array. */
-        var left = -1
-        var right = arraysize
-        while left < right {
-            /* Search for a vertex whose x-coordinate is too large for the left. */
-            repeat {
-                left += 1
-            } while ((left <= right) && ((m.vertices[start + left].x < pivot1) ||
-                ((m.vertices[start + left].x == pivot1) &&
-                    (m.vertices[start + left].y < pivot2))))
-            /* Search for a vertex whose x-coordinate is too small for the right. */
-            repeat {
-                right -= 1
-            } while ((left <= right) && ((m.vertices[start + right].x > pivot1) ||
-                ((m.vertices[start + right].x == pivot1) &&
-                    (m.vertices[start + right].y > pivot2))))
-            if left < right {
-                /* Swap the left and right vertices. */
-                m.vertices.swapAt(start + left, start + right)
-            }
-        }
-        /* Unlike in vertexsort(), at most one of the following */
-        /*   conditionals is true.                             */
-        if left > median {
-            /* Recursively shuffle the left subset. */
-            vertexMedianX(at: start, arraysize: left, median: median)
-        }
-        if right < median - 1 {
-            /* Recursively shuffle the right subset. */
-            vertexMedianX(at: (start + (right + 1)), arraysize: arraysize - right - 1,
-                          median: median - right - 1)
-        }
-    }
-
-    private func vertexMedianY(at start: Int, arraysize: Int, median: Int) {
-
-        if m.vertices.count == 2 {
-            let startVert = m.vertices[start]
-            let nextVert = m.vertices[start + 1]
-            /* Recursive base case. */
-            if (startVert.y > nextVert.y) ||
-                ((startVert.y == nextVert.y) &&
-                    (startVert.x > nextVert.x)) {
-                m.vertices[start + 1] = startVert
-                m.vertices[start] = nextVert
-            }
-            return
-        }
-        /* Choose a random pivot to split the array. */
-        let pivot = randomnation(choices: arraysize)
-        let pivot1 = m.vertices[start + pivot].y
-        let pivot2 = m.vertices[start + pivot].x
-        /* Split the array. */
-        var left = -1
-        var right = arraysize
-        while left < right {
-            /* Search for a vertex whose x-coordinate is too large for the left. */
-            repeat {
-                left += 1
-            } while ((left <= right) && ((m.vertices[start + left].y < pivot1) ||
-                ((m.vertices[start + left].y == pivot1) &&
-                    (m.vertices[start + left].x < pivot2))))
-            /* Search for a vertex whose x-coordinate is too small for the right. */
-            repeat {
-                right -= 1
-            } while ((left <= right) && ((m.vertices[start + right].y > pivot1) ||
-                ((m.vertices[start + right].y == pivot1) &&
-                    (m.vertices[start + right].x > pivot2))))
-            if left < right {
-                /* Swap the left and right vertices. */
-                m.vertices.swapAt(start + left, start + right)
-            }
-        }
-        /* Unlike in vertexsort(), at most one of the following */
-        /*   conditionals is true.                             */
-        if left > median {
-            /* Recursively shuffle the left subset. */
-            vertexMedianY(at: start, arraysize: left, median: median)
-        }
-        if right < median - 1 {
-            /* Recursively shuffle the right subset. */
-            vertexMedianY(at: (start + (right + 1)), arraysize: arraysize - right - 1,
-                          median: median - right - 1)
-        }
     }
 
     private func divconqrecurse(at start: Int, vertices: Int, axis: Int, farleft: inout OrientedTriangle, farright: inout OrientedTriangle) {
@@ -1657,11 +1530,11 @@ public class Triangulator {
         opposubseg.sdissolve(m: m)
 
         repeat {
-            splitsubseg.segorg = newvertex
+            splitsubseg.segorg = newvertex.id
             splitsubseg.snextself()
         } while (splitsubseg.subsegment !== m.dummysub)
         repeat {
-            opposubseg.segorg = newvertex
+            opposubseg.segorg = newvertex.id
             opposubseg.snextself()
         } while (opposubseg.subsegment !== m.dummysub)
 
@@ -1758,10 +1631,10 @@ public class Triangulator {
         if newsubseg.subsegment === m.dummysub {
             /* Make new subsegment and initialize its vertices. */
             var newsubseg = m.makesubseg()
-            newsubseg.sorg = m.vertices[tridest]
-            newsubseg.sdest = m.vertices[triorg]
-            newsubseg.segorg = m.vertices[tridest]
-            newsubseg.segdest = m.vertices[triorg]
+            newsubseg.sorg = tridest
+            newsubseg.sdest = triorg
+            newsubseg.segorg = tridest
+            newsubseg.segdest = triorg
 
             /* Bond new subsegment to the two triangles it is sandwiched between. */
             /*   Note that the facing triangle `oppotri' might be equal to        */
@@ -1803,13 +1676,15 @@ public class Triangulator {
             }
         }
 
-        if let printvertex = s.sorg {
+        if s.sorg >= 0 {
+            let printvertex = m.vertices[s.sorg]
             print("    Origin[\(2 + s.orient)] = \(printvertex)  (\(printvertex.x), \(printvertex.y))")
         } else {
             print("    Origin[\(2 + s.orient)] = NULL")
         }
 
-        if let printvertex = s.sdest {
+        if s.sdest >= 0 {
+            let printvertex = m.vertices[s.sdest]
             print("    Dest  [\(3 - s.orient)] = \(printvertex)  (\(printvertex.x), \(printvertex.y))")
 
         } else {
@@ -1832,13 +1707,15 @@ public class Triangulator {
             }
         }
 
-        if let printvertex = s.segorg {
+        if s.segorg >= 0 {
+            let printvertex = m.vertices[s.segorg]
             print("    Segment origin[\(4 + s.orient)] = \(printvertex)  (\(printvertex.x), \(printvertex.y))")
         } else {
             print("    Segment origin[\(4 + s.orient)] = NULL")
         }
 
-        if let printvertex = s.segdest {
+        if s.segdest >= 0 {
+            let printvertex = m.vertices[s.segdest]
             print("    Segment dest  [\(5 - s.orient)] = \(printvertex)  (\(printvertex.x), \(printvertex.y))")
         } else {
             print("    Segment dest  [\(5 - s.orient)] = NULL")
@@ -1911,9 +1788,11 @@ public class Triangulator {
 
                         if enq {
                             /* Add the subsegment to the list of encroached subsegments. */
-                            let encroached = m.createbadSubSeg(seg: brokensubseg.encodedSubsegment, org: brokensubseg.sorg!, dest: brokensubseg.sdest!)
+                            let encroached = m.createbadSubSeg(seg: brokensubseg.encodedSubsegment, org: brokensubseg.sorg, dest: brokensubseg.sdest)
                             if b.verbose {
-                                print("  Queueing encroached subsegment (\(encroached.subsegOrg.x), \(encroached.subsegOrg.y)) (\(encroached.subsegDest.x), \(encroached.subsegDest.y)).")
+                                let enc = m.vertices[encroached.subsegOrg]
+                                let dest = m.vertices[encroached.subsegDest]
+                                print("  Queueing encroached subsegment (\(enc.x), \(enc.y)) (\(dest.x), \(dest.y)).")
                             }
                         }
                     }
@@ -2010,7 +1889,7 @@ public class Triangulator {
 
             if var splitseg = splitseg {
                 /* Split the subsegment into two. */
-                splitseg.sdest = newvertex
+                splitseg.sdest = newvertex.id
                 let segmentorg = splitseg.segorg
                 let segmentdest = splitseg.segdest
                 splitseg.ssymself()
@@ -2398,8 +2277,8 @@ public class Triangulator {
 
     private func checkseg4encroach(testsubseg: OrientedSubsegment) -> Int {
 
-        let eorg = testsubseg.sorg!
-        let edest = testsubseg.sdest!
+        let eorg = m.vertices[testsubseg.sorg]
+        let edest = m.vertices[testsubseg.sdest]
         /* Check one neighbor of the subsegment. */
         var neighbortri = testsubseg.stpivot()
         /* Does the neighbor exist, or is this a boundary edge? */
@@ -2461,9 +2340,9 @@ public class Triangulator {
             /*   Be sure to get the orientation right.                   */
 
             if encroached == 1 {
-                _ = m.createbadSubSeg(seg: testsubseg.encodedSubsegment, org: eorg, dest: edest)
+                _ = m.createbadSubSeg(seg: testsubseg.encodedSubsegment, org: eorg.id, dest: edest.id)
             } else {
-                _ = m.createbadSubSeg(seg: testsym.encodedSubsegment, org: edest, dest: eorg)
+                _ = m.createbadSubSeg(seg: testsym.encodedSubsegment, org: edest.id, dest: eorg.id)
             }
         }
 
@@ -2576,22 +2455,22 @@ public class Triangulator {
                         testsub = tri1.tspivot()
                     } while (testsub.subsegment === m.dummysub)
                     /* Find the endpoints of the containing segment. */
-                    let org1 = testsub.segorg!
-                    let dest1 = testsub.segdest!
+                    let org1 = testsub.segorg
+                    let dest1 = testsub.segdest
                     /* Find a subsegment that contains `tdest'. */
                     repeat {
                         tri2.dnextself()
                         testsub = tri2.tspivot()
                     } while (testsub.subsegment === m.dummysub)
                     /* Find the endpoints of the containing segment. */
-                    let org2 = testsub.segorg!
-                    let dest2 = testsub.segdest!
+                    let org2 = testsub.segorg
+                    let dest2 = testsub.segdest
                     /* Check if the two containing segments have an endpoint in common. */
                     var joinvertex: Vertex?
-                    if dest1.x == org2.x && dest1.y == org2.y {
-                        joinvertex = dest1
-                    } else if org1.x == dest2.x && org1.y == dest2.y {
-                        joinvertex = org1
+                    if m.vertices[dest1].x == m.vertices[org2].x && m.vertices[dest1].y == m.vertices[org2].y {
+                        joinvertex = m.vertices[dest1]
+                    } else if m.vertices[org1].x == m.vertices[dest2].x && m.vertices[org1].y == m.vertices[dest2].y {
+                        joinvertex = m.vertices[org1]
                     }
                     if let joinvertex = joinvertex {
                         /* Compute the distance from the common endpoint (of the two  */

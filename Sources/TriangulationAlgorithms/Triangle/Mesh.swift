@@ -116,7 +116,7 @@ class Mesh {
         return newVertex
     }
 
-    func createbadSubSeg(seg: EncodedSubsegment, org: Vertex, dest: Vertex) -> BadSubsegment {
+    func createbadSubSeg(seg: EncodedSubsegment, org: Int, dest: Int) -> BadSubsegment {
         let newsubseg = BadSubsegment(seg: seg, org: org, dest: dest)
         badSubsegs.append(newsubseg)
         return newsubseg

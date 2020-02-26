@@ -9,12 +9,12 @@
 import Foundation
 
 struct BadSubsegment {
-    init(seg: EncodedSubsegment, org: Vertex, dest: Vertex) {
+    init(seg: EncodedSubsegment, org: Int, dest: Int) {
         enclosedSubsegment = seg
         subsegOrg = org
         subsegDest = dest
     }
 
     var enclosedSubsegment: EncodedSubsegment
-    var subsegOrg: Vertex, subsegDest: Vertex
+    var subsegOrg: Int, subsegDest: Int
 }

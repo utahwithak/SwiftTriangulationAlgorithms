@@ -91,7 +91,7 @@ struct OrientedSubsegment {
 
     /* These primitives determine or set the origin or destination of a          */
     /*   subsegment or the segment that includes it.                             */
-    var sorg: Vertex? {
+    var sorg: Int {
         get {
             if orient == 0 {
                 return subsegment.v1
@@ -109,7 +109,7 @@ struct OrientedSubsegment {
 
     }
 
-    var sdest: Vertex? {
+    var sdest: Int {
         get {
             if orient == 0 {
                 return subsegment.v2
@@ -126,7 +126,7 @@ struct OrientedSubsegment {
         }
     }
 
-    var segorg: Vertex? {
+    var segorg: Int {
         get {
             if orient == 0 {
                 return subsegment.v3
@@ -143,7 +143,7 @@ struct OrientedSubsegment {
         }
     }
 
-    var segdest: Vertex? {
+    var segdest: Int {
         get {
             if orient == 0 {
                 return subsegment.v4
