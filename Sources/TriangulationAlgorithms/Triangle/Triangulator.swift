@@ -355,57 +355,10 @@ public class Triangulator {
             print("  Sorting vertices.")
         }
 
-        /* Allocate an array of pointers to vertices for sorting. */
-        var sortarray = m.vertices.sorted { (lhs, rhs) -> Bool in
-            if lhs.x < rhs.x {
-                return true
-            } else if lhs.x > rhs.x {
-                return false
-            } else {
-                return lhs.y < rhs.y
-            }
-        }
-
-        /* Discard duplicate vertices, which can really mess up the algorithm. */
-        var i = 0
-        for j in 1..<m.invertices {
-            if (sortarray[i].x == sortarray[j].x) && (sortarray[i].y == sortarray[j].y) {
-                if !b.quiet {
-                    print("Warning:  A duplicate vertex at (%.12g, %.12g) appeared and was ignored.", sortarray[j].x, sortarray[j].y)
-                }
-                sortarray[j].state = .undead
-                m.undeads += 1
-            } else {
-                i += 1
-                sortarray[i] = sortarray[j]
-            }
-        }
-        i += 1
-        if b.dwyer {
-            /* Re-sort the array of vertices to accommodate alternating cuts. */
-            let divider = i >> 1
-            if i - divider >= 2 {
-                if divider >= 2 {
-                    alternateAxes(on: &sortarray[...], arraysize: divider, axis: 1)
-                }
-                alternateAxes(on: &sortarray[divider...], arraysize: i - divider, axis: 1)
-            }
-        }
-
-        if b.verbose {
-            print("  Forming triangulation.")
-        }
-
-        for i in 0..<m.vertices.count {
-            if sortarray[i] !== m.vertices[i] {
-                print("FAIL!")
-            }
-        }
-
         /* Form the Delaunay triangulation. */
         let hullleft = OrientedTriangle(triangle: m.dummytri, orient: 0)
         let hullright = OrientedTriangle(triangle: m.dummytri, orient: 0)
-        divconqrecurse(m: m, b: b, sortarray: sortarray[...], vertices: i, axis: 0, farleft: hullleft, farright: hullright)
+        divconqrecurse(m: m, b: b, sortarray: m.vertices[...], vertices: m.vertices.count, axis: 0, farleft: hullleft, farright: hullright)
 
         return removeghosts(m: m, b: b, startghost: hullleft)
     }

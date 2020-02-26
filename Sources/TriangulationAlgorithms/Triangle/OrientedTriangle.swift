@@ -61,37 +61,17 @@ class OrientedTriangle {
     var org: Vertex? {
         get { vertex(at: plus1mod3[orient])}
         set {
-            if let org = newValue {
-
-                print("setting org:\t\(org.x) \(org.y)")
-            } else {
-                print("clearing org")
-            }
-
             set(vertex: newValue, at: plus1mod3[orient]) }
     }
 
     var dest: Vertex? {
         get { vertex(at: minus1mod3[orient]) }
-        set {
-            if let dest = newValue {
-                print("setting dest:\t\(dest.x) \(dest.y)")
-            } else {
-                print("Clearing dest")
-            }
-            set(vertex: newValue, at: minus1mod3[orient])}
+        set {set(vertex: newValue, at: minus1mod3[orient])}
     }
 
     var apex: Vertex! {
         get { vertex(at: orient) }
-        set {
-            if let apex = newValue {
-                print("setting apex:\t \(apex.x) \(apex.y)")
-            } else {
-                print("clearing apex")
-            }
-
-            set(vertex: newValue, at: orient) }
+        set { set(vertex: newValue, at: orient) }
     }
 
     func copy(to otri2: OrientedTriangle) {
