@@ -207,7 +207,7 @@ public class Triangulator {
         /* Allocate memory for output triangles if necessary. */
         trianglelist.removeAll(keepingCapacity: true)
 
-        for triangle in m.triangles {
+        for triangle in m.triangles where !triangle.isDead {
             let triangleloop = OrientedTriangle(triangle: triangle, orientation: 0)
             trianglelist.append(m.vertices[triangleloop.org].mark)
             trianglelist.append(m.vertices[triangleloop.dest].mark)
@@ -952,7 +952,7 @@ public class Triangulator {
         if b.verbose {
             print("    Constructing mapping from vertices to triangles.")
         }
-        for triangle in m.triangles {
+        for triangle in m.triangles where !triangle.isDead {
             /* Check all three vertices of the triangle. */
             for i in 0..<3 {
                 let oriented = OrientedTriangle(triangle: triangle, orientation: i)
