@@ -77,15 +77,15 @@ struct Polygon {
             let p = q == 0 ? n - 1 : q - 1
             let P = points[p]
             let Q = points[q]
-            A += P.x * Q.y - Q.x * P.y;
+            A += P.x * Q.y - Q.x * P.y
         }
-        return A > 0 ? .CounterClockwise : .Clockwise;
+        return A > 0 ? .CounterClockwise : .Clockwise
     }
 
     mutating func flipOutEdges() {
-        var runner = edges[startEdge];
+        var runner = edges[startEdge]
         repeat {
-            vertices[runner.start].outEdge = runner.id;
+            vertices[runner.start].outEdge = runner.id
             runner = edges[runner.next]
         } while runner != edges[startEdge]
     }
@@ -98,22 +98,22 @@ struct Polygon {
         while let start = toVisit.first {
             startPoints.append(start)
 
-            var runner = start;
+            var runner = start
             repeat {
 
-                visted.insert(runner);
+                visted.insert(runner)
                 toVisit.removeAll(where: { $0 == runner})
                 if edges[runner].pair >= 0 && !visted.contains(edges[runner].pair) {
                     toVisit.append(edges[runner].pair)
                 }
                 runner = edges[runner].next
-            } while runner != start;
+            } while runner != start
 
         }
         //remove the loop along the outside.
         //will always be the second one since it will be added from the start edge.
         startPoints.remove(at: 1)
-        return startPoints;
+        return startPoints
     }
 
     var triangles: [Int] {
@@ -123,7 +123,7 @@ struct Polygon {
             repeat {
                 triangles.append(edges[runner].start)
                 runner = edges[runner].prev
-            } while runner != e;
+            } while runner != e
 
             if triangles.count % 3 != 0 {
                 print("invalid triangulation!!")
@@ -138,11 +138,11 @@ struct Polygon {
         v2.connectNew(edge: edges[e2], polygon: &self)
     }
 
-    mutating func createEdges(v1: MonotonePolygonAlgorithm.Vertex, v2: MonotonePolygonAlgorithm.Vertex) -> (Int, Int){
-        let dy = v2.y - v1.y;
-        let dx = v2.x - v1.x;
+    mutating func createEdges(v1: MonotonePolygonAlgorithm.Vertex, v2: MonotonePolygonAlgorithm.Vertex) -> (Int, Int) {
+        let dy = v2.y - v1.y
+        let dx = v2.x - v1.x
 
-        var e1Angle = atan2(dy, dx);
+        var e1Angle = atan2(dy, dx)
         if e1Angle < 0 {
              e1Angle += .pi * 2
         }

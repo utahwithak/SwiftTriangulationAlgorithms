@@ -33,7 +33,7 @@ public struct MonotonePolygonAlgorithm {
             repeat {
                 runner = polygon.edges[runner.prev]
                 rightChain.append(polygon.vertices[runner.start])
-            } while runner != lowest;
+            } while runner != lowest
 
             runner = highest
 
@@ -47,13 +47,13 @@ public struct MonotonePolygonAlgorithm {
             for i in 2..<(sequence.count - 1) {
                 let u = sequence[i]
 
-                if (leftChain.contains(u) && !leftChain.contains(stack.last!)) || (rightChain.contains(u) && !rightChain.contains(stack.last!)){
+                if (leftChain.contains(u) && !leftChain.contains(stack.last!)) || (rightChain.contains(u) && !rightChain.contains(stack.last!)) {
                     while !stack.isEmpty {
                         let cur = stack.removeLast()
 
                         //insert into D a diagonal from U to each popped vertex, except the last one
                         if !stack.isEmpty {
-                            polygon.addDiagonalFrom(start:u, toVertex:cur)
+                            polygon.addDiagonalFrom(start: u, toVertex: cur)
                         }
                     }
 
@@ -65,13 +65,12 @@ public struct MonotonePolygonAlgorithm {
                     //Pop One vertext from S
                     var popped = stack.removeLast()
 
-
                     //pop the other vertices from S as long as the diagonals from u to them are inside P
-                    while !stack.isEmpty && sideOfPoints(a: stack.last!, center:popped, andEnd:u) == (leftChain.contains(u) ? 1 : -1)  {
+                    while !stack.isEmpty && sideOfPoints(a: stack.last!, center: popped, andEnd: u) == (leftChain.contains(u) ? 1 : -1) {
 
                         popped = stack.removeLast()
 
-                        polygon.addDiagonalFrom(start:u, toVertex:popped)
+                        polygon.addDiagonalFrom(start: u, toVertex: popped)
                     }
                     //push last popped back onto stack, as it is now (or always was) connected to
                     stack.append(popped)
@@ -92,7 +91,6 @@ public struct MonotonePolygonAlgorithm {
                 }
             }
 
-
             stack.removeAll(keepingCapacity: true)
             rightChain.removeAll(keepingCapacity: true)
             leftChain.removeAll(keepingCapacity: true)
@@ -102,13 +100,12 @@ public struct MonotonePolygonAlgorithm {
         return polygon.triangles
     }
 
+    private static func sideOfPoints(a: Vertex, center b: Vertex, andEnd c: Vertex) -> Int {
+        let v1x = b.x-a.x
+        let v1y = b.y-a.y
 
-    private static func sideOfPoints(a:Vertex, center b:Vertex, andEnd c:Vertex) -> Int {
-        let v1x = b.x-a.x;
-        let v1y = b.y-a.y;
-
-        let v2x = c.x-b.x;
-        let v2y = c.y-b.y;
+        let v2x = c.x-b.x
+        let v2y = c.y-b.y
 
         return (v1x * v2y) - (v1y * v2x) < 0 ? -1 : 1
     }
@@ -123,8 +120,8 @@ public struct MonotonePolygonAlgorithm {
                 highest = runner
             }
             sequence.append(polygon.vertices[runner.start])
-            runner = polygon.edges[runner.next];
-        } while(runner != startEdge);
+            runner = polygon.edges[runner.next]
+        } while(runner != startEdge)
         sequence.sort()
 
     }

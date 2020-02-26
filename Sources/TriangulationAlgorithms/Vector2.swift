@@ -11,7 +11,6 @@ import Foundation
 import QuartzCore
 #endif
 
-
 public protocol Vector2 {
     var x: CGFloat { get }
     var y: CGFloat { get }

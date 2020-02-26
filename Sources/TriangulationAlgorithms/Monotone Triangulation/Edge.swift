@@ -27,7 +27,7 @@ struct Edge {
     func intersectsLine(at lineY: Double, polygon: Polygon) -> Bool {
         let start = polygon.vertices[self.start]
         let end = polygon.vertices[polygon.edges[pair].start]
-        return (start.y >= lineY && end.y <= lineY) || (start.y <= lineY && end.y >= lineY);
+        return (start.y >= lineY && end.y <= lineY) || (start.y <= lineY && end.y >= lineY)
     }
 
     func leftIntersectionOfLine(at lineY: Double, polygon: Polygon) -> Double {
@@ -36,23 +36,23 @@ struct Edge {
         let end = polygon.vertices[polygon.edges[pair].start]
         if start.y == lineY {
             if end.y == lineY && end.x < start.x {
-                return end.x;
+                return end.x
             } else {
-                return start.x;
+                return start.x
             }
         }
         if end.y == lineY {
-            return end.x;
+            return end.x
         }
 
-        let val = start.x + (((end.x - start.x) / (end.y - start.y) * (lineY - start.y)));
+        let val = start.x + (((end.x - start.x) / (end.y - start.y) * (lineY - start.y)))
 
-        return val;
+        return val
     }
 }
 
 extension Edge: Equatable {
-    static func ==(lhs: Edge, rhs: Edge) -> Bool {
+    static func == (lhs: Edge, rhs: Edge) -> Bool {
         return lhs.id == rhs.id
     }
 }

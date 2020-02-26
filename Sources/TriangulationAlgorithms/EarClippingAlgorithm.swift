@@ -19,7 +19,6 @@ public struct EarClippingAlgorithm {
         var indexes = [Int]()
         indexes.reserveCapacity(points.count * 3)
 
-
         let n = points.count
         if n < 3 {
             return indexes
@@ -45,28 +44,27 @@ public struct EarClippingAlgorithm {
                 return indexes
             }
 
-            let u = remainingPoints <= v ? 0 : v;
+            let u = remainingPoints <= v ? 0 : v
 
-            v = u + 1;
+            v = u + 1
 
             if remainingPoints <= v {
-                v = 0;
+                v = 0
             }
 
-            let w = remainingPoints <= v + 1 ? 0 : v + 1;
-
+            let w = remainingPoints <= v + 1 ? 0 : v + 1
 
             if snip(u: u, v: v, w: w, n: remainingPoints, V: V) {
 
-                let a = V[u];
-                let b = V[v];
-                let c = V[w];
-                indexes.append(a);
-                indexes.append(b);
-                indexes.append(c);
+                let a = V[u]
+                let b = V[v]
+                let c = V[w]
+                indexes.append(a)
+                indexes.append(b)
+                indexes.append(c)
                 m += 1
                 for t in (v + 1)..<remainingPoints {
-                    V[t - 1] = V[t];
+                    V[t - 1] = V[t]
                 }
                 remainingPoints -= 1
                 count = 2 * remainingPoints
@@ -77,18 +75,18 @@ public struct EarClippingAlgorithm {
     }
 
     private var area: CGFloat {
-        let n = points.count;
+        let n = points.count
         var A: CGFloat = 0.0
         for q in 0..<n {
             let p = q == 0 ? n - 1 : q - 1
-            let pval = points[p];
-            let qval = points[q];
-            A += pval.x * qval.y - qval.x * pval.y;
+            let pval = points[p]
+            let qval = points[q]
+            A += pval.x * qval.y - qval.x * pval.y
         }
-        return A * 0.5;
+        return A * 0.5
     }
 
-    private func snip(u: Int, v: Int,w: Int, n: Int, V: [Int]) -> Bool {
+    private func snip(u: Int, v: Int, w: Int, n: Int, V: [Int]) -> Bool {
 
         let A = points[V[u]]
         let B = points[V[v]]
@@ -102,18 +100,18 @@ public struct EarClippingAlgorithm {
 
         for p in 0..<n {
             if (p == u) || (p == v) || (p == w) {
-                continue;
+                continue
             }
-            let P = points[V[p]];
+            let P = points[V[p]]
             if insideTriangle(A: A, B: B, C: C, P: P) {
-                return false;
+                return false
             }
         }
-            return true;
+            return true
 
     }
 
-    private func insideTriangle(A: Vector2 ,B: Vector2, C:Vector2, P: Vector2) -> Bool {
+    private func insideTriangle(A: Vector2, B: Vector2, C: Vector2, P: Vector2) -> Bool {
 
         let ax = C.x - B.x, ay = C.y - B.y
         let bx = A.x - C.x, by = A.y - C.y
