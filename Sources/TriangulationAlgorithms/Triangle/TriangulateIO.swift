@@ -15,7 +15,7 @@ import Foundation
 public struct TriangulateIO {
     public init() {}
     public var pointlist = [Vector2]()
-    public var pointattributelist = [REAL]()
+    private var pointattributelist = [REAL]()
     public var pointmarkerlist = [Int]()
     var numberOfPointAttributes = 0
 

@@ -1,5 +1,5 @@
 //
-//  swift
+//  Predicates.swift
 //  SwiftTri
 //
 //  Created by Carl Wieland on 9/27/19.
@@ -9,33 +9,28 @@
 import Foundation
 
 class Predicates {
-    private let epsilon: REAL, splitter: REAL, resulterrbound: REAL
-    private let ccwerrboundA: REAL, ccwerrboundB: REAL, ccwerrboundC: REAL
-    private let iccerrboundA: REAL, iccerrboundB: REAL, iccerrboundC: REAL
 
-    // InCircleAdapt workspace:
-    var fin1 = [REAL](repeating: 0, count: 1152), fin2 = [REAL](repeating: 0, count: 1152), abdet = [REAL](repeating: 0, count: 64)
-    var axbc = [REAL](repeating: 0, count: 8), axxbc = [REAL](repeating: 0, count: 16), aybc = [REAL](repeating: 0, count: 8), ayybc = [REAL](repeating: 0, count: 16), adet = [REAL](repeating: 0, count: 32)
-    var bxca = [REAL](repeating: 0, count: 8), bxxca = [REAL](repeating: 0, count: 16), byca = [REAL](repeating: 0, count: 8), byyca = [REAL](repeating: 0, count: 16), bdet = [REAL](repeating: 0, count: 32)
-    var cxab = [REAL](repeating: 0, count: 8), cxxab = [REAL](repeating: 0, count: 16), cyab = [REAL](repeating: 0, count: 8), cyyab = [REAL](repeating: 0, count: 16), cdet  = [REAL](repeating: 0, count: 32)
+    /* Global constants.                                                         */
+    public private(set) static
 
-    var temp8 = [REAL](repeating: 0, count: 8), temp16a = [REAL](repeating: 0, count: 16), temp16b = [REAL](repeating: 0, count: 16), temp16c = [REAL](repeating: 0, count: 16)
-    var temp32a  = [REAL](repeating: 0, count: 32), temp32b  = [REAL](repeating: 0, count: 32), temp48  = [REAL](repeating: 0, count: 48), temp64  = [REAL](repeating: 0, count: 64)
+    var splitter: REAL = 0,        /* Used to split REAL factors for exact multiplication. */
+    epsilon: REAL = 0,                             /* Floating-point machine epsilon. */
+    resulterrbound: REAL = 0,
+    ccwerrboundA: REAL = 0, ccwerrboundB: REAL = 0, ccwerrboundC: REAL = 0,
+    iccerrboundA: REAL = 0, iccerrboundB: REAL = 0, iccerrboundC: REAL = 0,
+    o3derrboundA: REAL = 0, o3derrboundB: REAL = 0, o3derrboundC: REAL = 0
 
-    let exact: Bool
-
-    public init(exact: Bool = true) {
-        self.exact = exact
-        var every_other = true
+    public static func exactinit() {
         let half: REAL = 0.5
-        var epsilon: REAL = 1.0
-        var splitter: REAL = 1.0
-        var check: REAL = 1.0
-        var lastcheck: REAL
-        // Repeatedly divide 'epsilon' by two until it is too small to add to
-        // one without causing roundoff.  (Also check if the sum is equal to
-        // the previous sum, for machines that round up instead of using exact
-        // rounding.  Not that these routines will work on such machines.)
+        var check: REAL = 1.0, lastcheck: REAL = 0
+        var every_other = true
+
+        epsilon = 1.0
+        splitter = 1.0
+        /* Repeatedly divide `epsilon' by two until it is too small to add to      */
+        /*   one without causing roundoff.  (Also check if the sum is equal to     */
+        /*   the previous sum, for machines that round up instead of using exact   */
+        /*   rounding.  Not that these routines will work on such machines.)       */
         repeat {
             lastcheck = check
             epsilon *= half
@@ -46,56 +41,258 @@ class Predicates {
             check = 1.0 + epsilon
         } while ((check != 1.0) && (check != lastcheck))
         splitter += 1.0
-        self.epsilon = epsilon
-        self.splitter = splitter
-        // Error bounds for orientation and incircle tests.
-        self.resulterrbound = (3.0 + 8.0 * epsilon) * epsilon
-        self.ccwerrboundA = (3.0 + 16.0 * epsilon) * epsilon
-        self.ccwerrboundB = (2.0 + 12.0 * epsilon) * epsilon
-        self.ccwerrboundC = (9.0 + 64.0 * epsilon) * epsilon * epsilon
-        self.iccerrboundA = (10.0 + 96.0 * epsilon) * epsilon
-        self.iccerrboundB = (4.0 + 48.0 * epsilon) * epsilon
-        self.iccerrboundC = (44.0 + 576.0 * epsilon) * epsilon * epsilon
+        /* Error bounds for orientation and incircle tests. */
+        resulterrbound = (3.0 + 8.0 * epsilon) * epsilon
+        ccwerrboundA = (3.0 + 16.0 * epsilon) * epsilon
+        ccwerrboundB = (2.0 + 12.0 * epsilon) * epsilon
+        ccwerrboundC = (9.0 + 64.0 * epsilon) * epsilon * epsilon
+        iccerrboundA = (10.0 + 96.0 * epsilon) * epsilon
+        iccerrboundB = (4.0 + 48.0 * epsilon) * epsilon
+        iccerrboundC = (44.0 + 576.0 * epsilon) * epsilon * epsilon
+        o3derrboundA = (7.0 + 56.0 * epsilon) * epsilon
+        o3derrboundB = (3.0 + 28.0 * epsilon) * epsilon
+        o3derrboundC = (26.0 + 288.0 * epsilon) * epsilon * epsilon
     }
 
-    public func counterClockwise(a pa: Vertex, b pb: Vertex, c pc: Vertex) -> REAL {
+    public static func Two_Product_Presplit(_ a: REAL, _ b: REAL, _ bhi: REAL, _ blo: REAL, _ x: inout REAL, _ y: inout REAL) {
+        x = a * b
+        var ahi: REAL = 0
+        var alo: REAL = 0
+        Split(a, &ahi, &alo)
+        let err1 = x - (ahi * bhi)
+        let err2 = err1 - (alo * bhi)
+        let err3 = err2 - (ahi * blo)
+        y = (alo * blo) - err3
+    }
 
-        let detleft = (pa.x - pc.x) * (pb.y - pc.y)
-        let detright = (pa.y - pc.y) * (pb.x - pc.x)
-        let det = detleft - detright
+    public static func Two_Product(_ a: REAL, _ b: REAL, _ x: inout REAL, _ y: inout REAL ) {
+        x = (a * b)
+        Two_Product_Tail(a, b, x, &y)
+    }
 
-        if !exact {
-            return det
-        }
+    public static func Two_Product_Tail(_ a: REAL, _ b: REAL, _ x: REAL, _ y: inout REAL) {
+        var ahi: REAL = 0, alo: REAL = 0
+        var bhi: REAL = 0, blo: REAL = 0
+        Split(a, &ahi, &alo)
+        Split(b, &bhi, &blo)
+        let err1 = x - (ahi * bhi)
+        let err2 = err1 - (alo * bhi)
+        let err3 = err2 - (ahi * blo)
+        y = (alo * blo) - err3
+    }
 
-        let detsum: REAL
+    public static func Square_Tail(_ a: REAL, _  x: REAL) -> REAL {
+        var ahi: REAL = 0, alo: REAL = 0
+        Split(a, &ahi, &alo)
+        let err1 = x - (ahi * ahi)
+        let err3 = err1 - ((ahi + ahi) * alo)
+        return (alo * alo) - err3
+    }
 
-        if detleft > 0.0 {
-            if detright <= 0.0 {
-                return det
-            } else {
-                detsum = detleft + detright
-            }
-        } else if detleft < 0.0 {
-            if detright >= 0.0 {
-                return det
-            } else {
-                detsum = -detleft - detright
+    public static func Square_Tail(_ a: REAL, _  x: REAL, _ y: inout REAL) {
+        y = Square_Tail(a, x)
+    }
+
+    public static func Square(_ a: REAL, _ x: inout REAL, _ y: inout REAL) {
+        x = a * a
+        Square_Tail(a, x, &y)
+    }
+
+    public static func Square(_ a: REAL) -> (REAL, REAL) {
+        let x = a * a
+        return (x, Square_Tail(a, x))
+    }
+
+    public static func Split(_ a: REAL, _ ahi: inout REAL, _ alo: inout REAL) {
+        let c = (REAL) (splitter * a)
+        let abig = (REAL) (c - a)
+        ahi = c - abig
+        alo = a - ahi
+    }
+    public static func Two_Sum_Tail(_ a: REAL, _ b: REAL, _ x: REAL, _ y: inout REAL) {
+        let bvirt = (REAL) (x - a)
+        let avirt = x - bvirt
+        let bround = b - bvirt
+        let around = a - avirt
+        y = around + bround
+    }
+
+    public static func Two_Sum(_ a: REAL, _ b: REAL, _ x: inout REAL, _ y: inout REAL) {
+        x = a + b
+        Two_Sum_Tail(a, b, x, &y)
+    }
+
+    public static func Fast_Two_Sum(_ a: REAL, _ b: REAL, _ x: inout REAL, _ y: inout REAL) {
+        x = (REAL) (a + b)
+        Fast_Two_Sum_Tail(a, b, x, &y)
+    }
+
+    public static func Fast_Two_Sum_Tail(_ a: REAL, _ b: REAL, _ x: REAL, _ y: inout REAL) {
+        let bvirt = x - a
+         y = b - bvirt
+    }
+
+    public static func Two_Diff_Tail(_ a: REAL, _  b: REAL, _ x: REAL, _ y: inout REAL) {
+        let bvirt = (REAL) (a - x)
+        let avirt = x + bvirt
+        let bround = bvirt - b
+        let around = a - avirt
+        y = around + bround
+    }
+
+    public static func Two_Diff(_ a: REAL, _ b: REAL, _ x: inout REAL, _ y: inout REAL) {
+        x = (REAL) (a - b)
+        Two_Diff_Tail(a, b, x, &y)
+    }
+
+    public static func Two_One_Sum(_ a1: REAL, _ a0: REAL, _ b: REAL, _ x2: inout REAL, _ x1: inout REAL, _ x0: inout REAL) {
+        var i: REAL = 0
+        Two_Sum(a0, b, &i, &x0)
+        Two_Sum(a1, i, &x2, &x1)
+    }
+
+    public static func Two_One_Diff(_ a1: REAL, _ a0: REAL, _ b: REAL, _ x2: inout REAL, _ x1: inout REAL, _ x0: inout REAL) {
+        var i: REAL = 0
+        Two_Diff(a0, b, &i, &x0)
+        Two_Sum( a1, i, &x2, &x1)
+    }
+
+    public static func Two_Two_Sum(_ a1: REAL, _ a0: REAL, _ b1: REAL, _ b0: REAL, _ x3: inout REAL, _ x2: inout REAL, _ x1: inout REAL, _ x0: inout REAL) {
+        var j: REAL = 0, _0: REAL = 0
+        Two_One_Sum(a1, a0, b0, &j, &_0, &x0)
+        Two_One_Sum(j, _0, b1, &x3, &x2, &x1)
+    }
+
+    public static func Two_Two_Sum(_ a1: REAL, _ a0: REAL, _ b1: REAL, _ b0: REAL) -> [REAL] {
+        var j: REAL = 0, _0: REAL = 0
+        var x3: REAL = 0
+        var x2: REAL = 0
+        var x1: REAL = 0
+        var x0: REAL = 0
+        Two_One_Sum(a1, a0, b0, &j, &_0, &x0)
+        Two_One_Sum(j, _0, b1, &x3, &x2, &x1)
+        return [x0, x1, x2, x3]
+    }
+
+    public static func Two_Two_Diff(_ a1: REAL, _ a0: REAL, _ b1: REAL, _ b0: REAL, _ x3: inout REAL, _ x2: inout REAL, _ x1: inout REAL, _ x0: inout REAL) {
+        var j: REAL = 0, _0: REAL = 0
+        Two_One_Diff(a1, a0, b0, &j, &_0, &x0)
+        Two_One_Diff(j, _0, b1, &x3, &x2, &x1)
+    }
+
+    public static func Two_Two_Diff(_ a1: REAL, _ a0: REAL, _ b1: REAL, _ b0: REAL) -> [REAL] {
+        var j: REAL = 0, _0: REAL = 0
+        var x3: REAL = 0
+        var x2: REAL = 0
+        var x1: REAL = 0
+        var x0: REAL = 0
+        Two_One_Diff(a1, a0, b0, &j, &_0, &x0)
+
+        Two_One_Diff(j, _0, b1, &x3, &x2, &x1)
+        return [x0, x1, x2, x3]
+    }
+
+    public static func fast_expansion_sum_zeroelim(_ e: [REAL], _ f: [REAL]) -> [REAL] {
+
+        var h = [REAL]()
+        var enow = e[0]
+        var fnow = f[0]
+        var eindex = 0, findex = 0
+        var Q: REAL
+        if (fnow > enow) == (fnow > -enow) {
+            Q = enow
+            eindex += 1
+
+            if eindex < e.count {
+                enow = e[eindex]
+
             }
         } else {
-            return det
+            Q = fnow
+            findex += 1
+            if findex < f.count {
+
+                fnow = f[findex]
+            }
+        }
+        if (eindex < e.count) && (findex < f.count) {
+            var Qnew: REAL = 0
+            var hh: REAL = 0
+            if (fnow > enow) == (fnow > -enow) {
+                Fast_Two_Sum(enow, Q, &Qnew, &hh)
+                eindex += 1
+                if eindex < e.count {
+                    enow = e[eindex]
+                }
+            } else {
+                Fast_Two_Sum(fnow, Q, &Qnew, &hh)
+                findex += 1
+                if findex < f.count {
+                fnow = f[findex]
+                }
+            }
+            Q = Qnew
+            if hh != 0.0 {
+                h.append(hh)
+            }
+            while (eindex < e.count) && (findex < f.count) {
+                var Qnew: REAL = 0
+                var hh: REAL = 0
+                if (fnow > enow) == (fnow > -enow) {
+                    Two_Sum(Q, enow, &Qnew, &hh)
+                    eindex += 1
+                    if eindex < e.count {
+                        enow = e[eindex]
+                    }
+                } else {
+                    Two_Sum(Q, fnow, &Qnew, &hh)
+                    findex += 1
+                    if findex < f.count {
+                        fnow = f[findex]
+                    }
+                }
+                Q = Qnew
+                if hh != 0.0 {
+                    h.append(hh)
+                }
+            }
+        }
+        while eindex < e.count {
+            var Qnew: REAL = 0
+            var hh: REAL = 0
+            Two_Sum(Q, enow, &Qnew, &hh)
+            eindex += 1
+            if eindex < e.count {
+                enow = e[eindex]
+            }
+            Q = Qnew
+            if hh != 0.0 {
+                h.append(hh)
+            }
+        }
+        while findex < f.count {
+            var Qnew: REAL = 0
+            var hh: REAL = 0
+            Two_Sum(Q, fnow, &Qnew, &hh)
+            findex += 1
+            if findex < f.count {
+                fnow = f[findex]
+            }
+            Q = Qnew
+            if hh != 0.0 {
+                h.append(hh)
+            }
         }
 
-        let errbound = ccwerrboundA * detsum
-        if (det >= errbound) || (-det >= errbound) {
-            return det
+        if (Q != 0.0) || (h.isEmpty) {
+            h.append(Q)
         }
-
-        return counterClockwiseAdapt(pa: pa, pb: pb, pc: pc, detsum: detsum)
-
+        return h
     }
 
-    public func inCircle(a pa: Vector2, b pb: Vector2, c pc: Vector2, d pd: Vector2) -> REAL {
+    public static func incircle(_ m: Mesh, _ b: Behavior, _ pa: Vertex, _ pb: Vertex, _ pc: Vertex, _ pd: Vertex) -> REAL {
+
+        m.incirclecount += 1
 
         let adx = pa.x - pd.x
         let bdx = pb.x - pd.x
@@ -116,750 +313,485 @@ class Predicates {
         let bdxady = bdx * ady
         let clift = cdx * cdx + cdy * cdy
 
-        let det = alift * (bdxcdy - cdxbdy)
-            + blift * (cdxady - adxcdy)
-            + clift * (adxbdy - bdxady)
+        let det = alift * (bdxcdy - cdxbdy) + blift * (cdxady - adxcdy) + clift * (adxbdy - bdxady)
 
-        if !exact {
+        if b.noexact {
             return det
         }
 
-        let permanent = (abs(bdxcdy) + abs(cdxbdy)) * alift
-            + (abs(cdxady) + abs(adxcdy)) * blift
-            + (abs(adxbdy) + abs(bdxady)) * clift
+        let permanent = (abs(bdxcdy) + abs(cdxbdy)) * alift + (abs(cdxady) + abs(adxcdy)) * blift + (abs(adxbdy) + abs(bdxady)) * clift
         let errbound = iccerrboundA * permanent
         if (det > errbound) || (-det > errbound) {
             return det
         }
 
-        return inCircleAdapt(pa: pa, pb: pb, pc: pc, pd: pd, permanent: permanent)
+        return incircleadapt(pa, pb, pc, pd, permanent)
     }
 
-    public func nonRegular( pa: Vector2, pb: Vector2, pc: Vector2, pd: Vector2) -> REAL {
-        return inCircle(a: pa, b: pb, c: pc, d: pd)
-    }
+    public static func incircleadapt(_ pa: Vertex, _ pb: Vertex, _ pc: Vertex, _ pd: Vertex, _ permanent: REAL ) -> REAL {
 
-    var bc = [REAL](repeating: 0, count: 4), ca = [REAL](repeating: 0, count: 4), ab = [REAL](repeating: 0, count: 4)
-    var aa = [REAL](repeating: 0, count: 4), bb = [REAL](repeating: 0, count: 4), cc = [REAL](repeating: 0, count: 4)
-    var u = [REAL](repeating: 0, count: 5), v = [REAL](repeating: 0, count: 5)
-    var axtbctt = [REAL](repeating: 0, count: 8), aytbctt = [REAL](repeating: 0, count: 8), bxtcatt = [REAL](repeating: 0, count: 8)
-    var bytcatt = [REAL](repeating: 0, count: 8), cxtabtt = [REAL](repeating: 0, count: 8), cytabtt = [REAL](repeating: 0, count: 8)
-    var abtt = [REAL](repeating: 0, count: 4), bctt = [REAL](repeating: 0, count: 4), catt = [REAL](repeating: 0, count: 4)
-    var abt = [REAL](repeating: 0, count: 8), bct = [REAL](repeating: 0, count: 8), cat = [REAL](repeating: 0, count: 8)
-    var axtbct = [REAL](repeating: 0, count: 16), aytbct = [REAL](repeating: 0, count: 16), bxtcat = [REAL](repeating: 0, count: 16), bytcat = [REAL](repeating: 0, count: 16), cxtabt = [REAL](repeating: 0, count: 16), cytabt = [REAL](repeating: 0, count: 16)
-    var axtbb = [REAL](repeating: 0, count: 8), axtcc = [REAL](repeating: 0, count: 8), aytbb = [REAL](repeating: 0, count: 8), aytcc = [REAL](repeating: 0, count: 8)
-    var axtbblen = 0, axtcclen = 0, aytbblen = 0, aytcclen = 0
-    var bxtaa = [REAL](repeating: 0, count: 8), bxtcc = [REAL](repeating: 0, count: 8), bytaa = [REAL](repeating: 0, count: 8), bytcc = [REAL](repeating: 0, count: 8)
-    var bxtaalen = 0, bxtcclen = 0, bytaalen = 0, bytcclen = 0
-    var cxtaa = [REAL](repeating: 0, count: 8), cxtbb = [REAL](repeating: 0, count: 8), cytaa = [REAL](repeating: 0, count: 8), cytbb = [REAL](repeating: 0, count: 8)
-    var cxtaalen = 0, cxtbblen = 0, cytaalen = 0, cytbblen = 0
-    var axtbc = [REAL](repeating: 0, count: 8), aytbc = [REAL](repeating: 0, count: 8), bxtca = [REAL](repeating: 0, count: 8), bytca = [REAL](repeating: 0, count: 8), cxtab = [REAL](repeating: 0, count: 8), cytab = [REAL](repeating: 0, count: 8)
-    private func inCircleAdapt(pa: Vector2, pb: Vector2, pc: Vector2, pd: Vector2, permanent: REAL) -> REAL {
+        let adx = pa.x - pd.x
+        let bdx = pb.x - pd.x
+        let cdx = pc.x - pd.x
+        let ady = pa.y - pd.y
+        let bdy = pb.y - pd.y
+        let cdy = pc.y - pd.y
+        var bdxcdy1: REAL = 0, bdxcdy0: REAL = 0, cdxbdy1: REAL = 0, cdxbdy0: REAL = 0
+        Two_Product(bdx, cdy, &bdxcdy1, &bdxcdy0)
+        Two_Product(cdx, bdy, &cdxbdy1, &cdxbdy0)
 
-        var adx: REAL = 0, bdx: REAL = 0, cdx: REAL = 0, ady: REAL = 0, bdy: REAL = 0, cdy: REAL = 0
-        var det: REAL = 0, errbound: REAL = 0
+        let bc = Two_Two_Diff(bdxcdy1, bdxcdy0, cdxbdy1, cdxbdy0)
+        let axbc = scale_expansion_zeroelim(e: bc, b: adx)
+        let axxbc = scale_expansion_zeroelim(e: axbc, b: adx)
+        let aybc = scale_expansion_zeroelim(e: bc, b: ady)
+        let ayybc = scale_expansion_zeroelim(e: aybc, b: ady)
+        let adet = fast_expansion_sum_zeroelim(axxbc, ayybc)
 
-        var bdxcdy1: REAL = 0, cdxbdy1: REAL = 0, cdxady1: REAL = 0, adxcdy1: REAL = 0, adxbdy1: REAL = 0, bdxady1: REAL = 0
-        var bdxcdy0: REAL = 0, cdxbdy0: REAL = 0, cdxady0: REAL = 0, adxcdy0: REAL = 0, adxbdy0: REAL = 0, bdxady0: REAL = 0
-        var bc3: REAL = 0, ca3: REAL = 0, ab3: REAL = 0
-        var axbclen = 0, axxbclen = 0, aybclen = 0, ayybclen = 0, alen = 0
-        var bxcalen = 0, bxxcalen = 0, bycalen = 0, byycalen = 0, blen = 0
-        var cxablen = 0, cxxablen = 0, cyablen = 0, cyyablen = 0, clen = 0
-        var ablen = 0
-        var finnow: [REAL], finother: [REAL], finswap: [REAL]
-        var finlength = 0
+        var cdxady1: REAL = 0, cdxady0: REAL = 0, adxcdy1: REAL = 0, adxcdy0: REAL = 0
+        Two_Product(cdx, ady, &cdxady1, &cdxady0)
+        Two_Product(adx, cdy, &adxcdy1, &adxcdy0)
+        let ca = Two_Two_Diff(cdxady1, cdxady0, adxcdy1, adxcdy0)
 
-        var adxtail: REAL = 0, bdxtail: REAL = 0, cdxtail: REAL = 0, adytail: REAL = 0, bdytail: REAL = 0, cdytail: REAL = 0
-        var adxadx1: REAL = 0, adyady1: REAL = 0, bdxbdx1: REAL = 0, bdybdy1: REAL = 0, cdxcdx1: REAL = 0, cdycdy1: REAL = 0
-        var adxadx0: REAL = 0, adyady0: REAL = 0, bdxbdx0: REAL = 0, bdybdy0: REAL = 0, cdxcdx0: REAL = 0, cdycdy0: REAL = 0
-        var aa3: REAL = 0, bb3: REAL = 0, cc3: REAL = 0
-        var ti1: REAL = 0, tj1: REAL = 0
-        var ti0: REAL = 0, tj0: REAL = 0
-        // Edited to work around index out of range exceptions (changed array length from 4 to 5).
-        // See unsafe indexing in FastExpansionSumZeroElim.
-        var u3: REAL = 0, v3: REAL = 0
-        var temp8len = 0, temp16alen = 0, temp16blen = 0, temp16clen = 0
-        var temp32alen = 0, temp32blen = 0, temp48len = 0, temp64len = 0
+        let bxca = scale_expansion_zeroelim(e: ca, b: bdx)
+        let bxxca = scale_expansion_zeroelim(e: bxca, b: bdx)
+        let byca = scale_expansion_zeroelim(e: ca, b: bdy)
+        let byyca = scale_expansion_zeroelim( e: byca, b: bdy)
+        let bdet = fast_expansion_sum_zeroelim(bxxca, byyca)
 
-        var axtbclen = 0, aytbclen = 0, bxtcalen = 0, bytcalen = 0, cxtablen = 0, cytablen = 0
-        var axtbctlen = 0, aytbctlen = 0, bxtcatlen = 0, bytcatlen = 0, cxtabtlen = 0, cytabtlen = 0
-        var axtbcttlen = 0, aytbcttlen = 0, bxtcattlen = 0, bytcattlen = 0, cxtabttlen = 0, cytabttlen = 0
-        var abtlen = 0, bctlen = 0, catlen = 0
-        var abttlen = 0, bcttlen = 0, cattlen = 0
-        var abtt3: REAL = 0, bctt3: REAL = 0, catt3: REAL = 0
-        var negate: REAL = 0
+        var adxbdy1: REAL = 0, adxbdy0: REAL = 0, bdxady1: REAL = 0, bdxady0: REAL = 0
+        Two_Product(adx, bdy, &adxbdy1, &adxbdy0)
+        Two_Product(bdx, ady, &bdxady1, &bdxady0)
+        let ab = Two_Two_Diff(adxbdy1, adxbdy0, bdxady1, bdxady0)
 
-        var bvirt: REAL = 0
-        var avirt: REAL = 0, bround: REAL = 0, around: REAL = 0
-        var c: REAL = 0
-        var abig: REAL = 0
-        var ahi: REAL = 0, alo: REAL = 0, bhi: REAL = 0, blo: REAL = 0
-        var err1: REAL = 0, err2: REAL = 0, err3: REAL = 0
-        var _i: REAL = 0, _j: REAL = 0
-        var _0: REAL = 0
+        let cxab = scale_expansion_zeroelim(e: ab, b: cdx)
+        let cxxab = scale_expansion_zeroelim(e: cxab, b: cdx)
+        let cyab = scale_expansion_zeroelim(e: ab, b: cdy)
+        let cyyab = scale_expansion_zeroelim(e: cyab, b: cdy)
+        let cdet = fast_expansion_sum_zeroelim(cxxab, cyyab)
 
-        adx = (pa.x - pd.x)
-        bdx = (pb.x - pd.x)
-        cdx = (pc.x - pd.x)
-        ady = (pa.y - pd.y)
-        bdy = (pb.y - pd.y)
-        cdy = (pc.y - pd.y)
+        let abdet = fast_expansion_sum_zeroelim(adet, bdet)
+        let fin1 = fast_expansion_sum_zeroelim(abdet, cdet)
 
-        adx = (pa.x - pd.x)
-        bdx = (pb.x - pd.x)
-        cdx = (pc.x - pd.x)
-        ady = (pa.y - pd.y)
-        bdy = (pb.y - pd.y)
-        cdy = (pc.y - pd.y)
-
-        bdxcdy1 = (bdx * cdy); c = (splitter * bdx); abig = (c - bdx); ahi = c - abig; alo = bdx - ahi; c = (splitter * cdy); abig = (c - cdy); bhi = c - abig; blo = cdy - bhi; err1 = bdxcdy1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); bdxcdy0 = (alo * blo) - err3
-        cdxbdy1 = (cdx * bdy); c = (splitter * cdx); abig = (c - cdx); ahi = c - abig; alo = cdx - ahi; c = (splitter * bdy); abig = (c - bdy); bhi = c - abig; blo = bdy - bhi; err1 = cdxbdy1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); cdxbdy0 = (alo * blo) - err3
-        _i = (bdxcdy0 - cdxbdy0); bvirt = (bdxcdy0 - _i); avirt = _i + bvirt; bround = bvirt - cdxbdy0; around = bdxcdy0 - avirt; bc[0] = around + bround; _j = (bdxcdy1 + _i); bvirt = (_j - bdxcdy1); avirt = _j - bvirt; bround = _i - bvirt; around = bdxcdy1 - avirt; _0 = around + bround; _i = (_0 - cdxbdy1); bvirt = (_0 - _i); avirt = _i + bvirt; bround = bvirt - cdxbdy1; around = _0 - avirt; bc[1] = around + bround; bc3 = (_j + _i); bvirt = (bc3 - _j); avirt = bc3 - bvirt; bround = _i - bvirt; around = _j - avirt; bc[2] = around + bround
-        bc[3] = bc3
-        axbclen = scaleExpansionZeroElim(elen: 4, e: bc, b: adx, h: &axbc)
-        axxbclen = scaleExpansionZeroElim(elen: axbclen, e: axbc, b: adx, h: &axxbc)
-        aybclen = scaleExpansionZeroElim(elen: 4, e: bc, b: ady, h: &aybc)
-        ayybclen = scaleExpansionZeroElim(elen: aybclen, e: aybc, b: ady, h: &ayybc)
-        alen = fastExpansionSumZeroElim(elen: axxbclen, e: axxbc, flen: ayybclen, f: ayybc, h: &adet)
-
-        cdxady1 = (cdx * ady); c = (splitter * cdx); abig = (c - cdx); ahi = c - abig; alo = cdx - ahi; c = (splitter * ady); abig = (c - ady); bhi = c - abig; blo = ady - bhi; err1 = cdxady1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); cdxady0 = (alo * blo) - err3
-        adxcdy1 = (adx * cdy); c = (splitter * adx); abig = (c - adx); ahi = c - abig; alo = adx - ahi; c = (splitter * cdy); abig = (c - cdy); bhi = c - abig; blo = cdy - bhi; err1 = adxcdy1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); adxcdy0 = (alo * blo) - err3
-        _i = (cdxady0 - adxcdy0); bvirt = (cdxady0 - _i); avirt = _i + bvirt; bround = bvirt - adxcdy0; around = cdxady0 - avirt; ca[0] = around + bround; _j = (cdxady1 + _i); bvirt = (_j - cdxady1); avirt = _j - bvirt; bround = _i - bvirt; around = cdxady1 - avirt; _0 = around + bround; _i = (_0 - adxcdy1); bvirt = (_0 - _i); avirt = _i + bvirt; bround = bvirt - adxcdy1; around = _0 - avirt; ca[1] = around + bround; ca3 = (_j + _i); bvirt = (ca3 - _j); avirt = ca3 - bvirt; bround = _i - bvirt; around = _j - avirt; ca[2] = around + bround
-        ca[3] = ca3
-        bxcalen = scaleExpansionZeroElim(elen: 4, e: ca, b: bdx, h: &bxca)
-        bxxcalen = scaleExpansionZeroElim(elen: bxcalen, e: bxca, b: bdx, h: &bxxca)
-        bycalen = scaleExpansionZeroElim(elen: 4, e: ca, b: bdy, h: &byca)
-        byycalen = scaleExpansionZeroElim(elen: bycalen, e: byca, b: bdy, h: &byyca)
-        blen = fastExpansionSumZeroElim(elen: bxxcalen, e: bxxca, flen: byycalen, f: byyca, h: &bdet)
-
-        adxbdy1 = (adx * bdy); c = (splitter * adx); abig = (c - adx); ahi = c - abig; alo = adx - ahi; c = (splitter * bdy); abig = (c - bdy); bhi = c - abig; blo = bdy - bhi; err1 = adxbdy1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); adxbdy0 = (alo * blo) - err3
-        bdxady1 = (bdx * ady); c = (splitter * bdx); abig = (c - bdx); ahi = c - abig; alo = bdx - ahi; c = (splitter * ady); abig = (c - ady); bhi = c - abig; blo = ady - bhi; err1 = bdxady1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); bdxady0 = (alo * blo) - err3
-        _i = (adxbdy0 - bdxady0); bvirt = (adxbdy0 - _i); avirt = _i + bvirt; bround = bvirt - bdxady0; around = adxbdy0 - avirt; ab[0] = around + bround; _j = (adxbdy1 + _i); bvirt = (_j - adxbdy1); avirt = _j - bvirt; bround = _i - bvirt; around = adxbdy1 - avirt; _0 = around + bround; _i = (_0 - bdxady1); bvirt = (_0 - _i); avirt = _i + bvirt; bround = bvirt - bdxady1; around = _0 - avirt; ab[1] = around + bround; ab3 = (_j + _i); bvirt = (ab3 - _j); avirt = ab3 - bvirt; bround = _i - bvirt; around = _j - avirt; ab[2] = around + bround
-        ab[3] = ab3
-        cxablen = scaleExpansionZeroElim(elen: 4, e: ab, b: cdx, h: &cxab)
-        cxxablen = scaleExpansionZeroElim(elen: cxablen, e: cxab, b: cdx, h: &cxxab)
-        cyablen = scaleExpansionZeroElim(elen: 4, e: ab, b: cdy, h: &cyab)
-        cyyablen = scaleExpansionZeroElim(elen: cyablen, e: cyab, b: cdy, h: &cyyab)
-        clen = fastExpansionSumZeroElim(elen: cxxablen, e: cxxab, flen: cyyablen, f: cyyab, h: &cdet)
-
-        ablen = fastExpansionSumZeroElim(elen: alen, e: adet, flen: blen, f: bdet, h: &abdet)
-        finlength = fastExpansionSumZeroElim(elen: ablen, e: abdet, flen: clen, f: cdet, h: &fin1)
-
-        det = estimate(elen: finlength, e: fin1)
-        errbound = iccerrboundB * permanent
+        var det = fin1.reduce(0, +)
+        var errbound = iccerrboundB * permanent
         if (det >= errbound) || (-det >= errbound) {
             return det
         }
 
-        bvirt = (pa.x - adx); avirt = adx + bvirt; bround = bvirt - pd.x; around = pa.x - avirt; adxtail = around + bround
-        bvirt = (pa.y - ady); avirt = ady + bvirt; bround = bvirt - pd.y; around = pa.y - avirt; adytail = around + bround
-        bvirt = (pb.x - bdx); avirt = bdx + bvirt; bround = bvirt - pd.x; around = pb.x - avirt; bdxtail = around + bround
-        bvirt = (pb.y - bdy); avirt = bdy + bvirt; bround = bvirt - pd.y; around = pb.y - avirt; bdytail = around + bround
-        bvirt = (pc.x - cdx); avirt = cdx + bvirt; bround = bvirt - pd.x; around = pc.x - avirt; cdxtail = around + bround
-        bvirt = (pc.y - cdy); avirt = cdy + bvirt; bround = bvirt - pd.y; around = pc.y - avirt; cdytail = around + bround
+        var adxtail: REAL = 0, adytail: REAL = 0, bdxtail: REAL = 0, bdytail: REAL = 0, cdxtail: REAL = 0, cdytail: REAL = 0
+        Two_Diff_Tail(pa.x, pd.x, adx, &adxtail)
+        Two_Diff_Tail(pa.y, pd.y, ady, &adytail)
+        Two_Diff_Tail(pb.x, pd.x, bdx, &bdxtail)
+        Two_Diff_Tail(pb.y, pd.y, bdy, &bdytail)
+        Two_Diff_Tail(pc.x, pd.x, cdx, &cdxtail)
+        Two_Diff_Tail(pc.y, pd.y, cdy, &cdytail)
         if (adxtail == 0.0) && (bdxtail == 0.0) && (cdxtail == 0.0)
             && (adytail == 0.0) && (bdytail == 0.0) && (cdytail == 0.0) {
             return det
         }
 
-        errbound = iccerrboundC * permanent + resulterrbound * ((det) >= 0.0 ? (det) : -(det))
-        det += ((adx * adx + ady * ady) * ((bdx * cdytail + cdy * bdxtail) - (bdy * cdxtail + cdx * bdytail))
-            + 2.0 * (adx * adxtail + ady * adytail) * (bdx * cdy - bdy * cdx))
-            + ((bdx * bdx + bdy * bdy) * ((cdx * adytail + ady * cdxtail) - (cdy * adxtail + adx * cdytail))
-                + 2.0 * (bdx * bdxtail + bdy * bdytail) * (cdx * ady - cdy * adx))
-            + ((cdx * cdx + cdy * cdy) * ((adx * bdytail + bdy * adxtail) - (ady * bdxtail + bdx * adytail))
-                + 2.0 * (cdx * cdxtail + cdy * cdytail) * (adx * bdy - ady * bdx))
+        errbound = iccerrboundC * permanent + resulterrbound * abs(det)
+        det += ((adx * adx + ady * ady) * ((bdx * cdytail + cdy * bdxtail)
+                                           - (bdy * cdxtail + cdx * bdytail))
+                + 2.0 * (adx * adxtail + ady * adytail) * (bdx * cdy - bdy * cdx))
+        + ((bdx * bdx + bdy * bdy) * ((cdx * adytail + ady * cdxtail)
+                                      - (cdy * adxtail + adx * cdytail))
+           + 2.0 * (bdx * bdxtail + bdy * bdytail) * (cdx * ady - cdy * adx))
+        + ((cdx * cdx + cdy * cdy) * ((adx * bdytail + bdy * adxtail)
+                                      - (ady * bdxtail + bdx * adytail))
+           + 2.0 * (cdx * cdxtail + cdy * cdytail) * (adx * bdy - ady * bdx))
         if (det >= errbound) || (-det >= errbound) {
             return det
         }
 
-        finnow = fin1
-        finother = fin2
+        var aa = [REAL]()
+        var bb = [REAL]()
+        var cc = [REAL]()
 
         if (bdxtail != 0.0) || (bdytail != 0.0) || (cdxtail != 0.0) || (cdytail != 0.0) {
-            adxadx1 = (adx * adx); c = (splitter * adx); abig = (c - adx); ahi = c - abig; alo = adx - ahi; err1 = adxadx1 - (ahi * ahi); err3 = err1 - ((ahi + ahi) * alo); adxadx0 = (alo * alo) - err3
-            adyady1 = (ady * ady); c = (splitter * ady); abig = (c - ady); ahi = c - abig; alo = ady - ahi; err1 = adyady1 - (ahi * ahi); err3 = err1 - ((ahi + ahi) * alo); adyady0 = (alo * alo) - err3
-            _i = (adxadx0 + adyady0); bvirt = (_i - adxadx0); avirt = _i - bvirt; bround = adyady0 - bvirt; around = adxadx0 - avirt; aa[0] = around + bround; _j = (adxadx1 + _i); bvirt = (_j - adxadx1); avirt = _j - bvirt; bround = _i - bvirt; around = adxadx1 - avirt; _0 = around + bround; _i = (_0 + adyady1); bvirt = (_i - _0); avirt = _i - bvirt; bround = adyady1 - bvirt; around = _0 - avirt; aa[1] = around + bround; aa3 = (_j + _i); bvirt = (aa3 - _j); avirt = aa3 - bvirt; bround = _i - bvirt; around = _j - avirt; aa[2] = around + bround
-            aa[3] = aa3
+            let (adxadx1, adxadx0) = Square(adx)
+            let (adyady1, adyady0) = Square(ady)
+            aa = Two_Two_Sum(adxadx1, adxadx0, adyady1, adyady0)
         }
         if (cdxtail != 0.0) || (cdytail != 0.0) || (adxtail != 0.0) || (adytail != 0.0) {
-            bdxbdx1 = (bdx * bdx); c = (splitter * bdx); abig = (c - bdx); ahi = c - abig; alo = bdx - ahi; err1 = bdxbdx1 - (ahi * ahi); err3 = err1 - ((ahi + ahi) * alo); bdxbdx0 = (alo * alo) - err3
-            bdybdy1 = (bdy * bdy); c = (splitter * bdy); abig = (c - bdy); ahi = c - abig; alo = bdy - ahi; err1 = bdybdy1 - (ahi * ahi); err3 = err1 - ((ahi + ahi) * alo); bdybdy0 = (alo * alo) - err3
-            _i = (bdxbdx0 + bdybdy0); bvirt = (_i - bdxbdx0); avirt = _i - bvirt; bround = bdybdy0 - bvirt; around = bdxbdx0 - avirt; bb[0] = around + bround; _j = (bdxbdx1 + _i); bvirt = (_j - bdxbdx1); avirt = _j - bvirt; bround = _i - bvirt; around = bdxbdx1 - avirt; _0 = around + bround; _i = (_0 + bdybdy1); bvirt = (_i - _0); avirt = _i - bvirt; bround = bdybdy1 - bvirt; around = _0 - avirt; bb[1] = around + bround; bb3 = (_j + _i); bvirt = (bb3 - _j); avirt = bb3 - bvirt; bround = _i - bvirt; around = _j - avirt; bb[2] = around + bround
-            bb[3] = bb3
+            let (bdxbdx1, bdxbdx0) = Square(bdx)
+            let (bdybdy1, bdybdy0) = Square(bdy)
+            bb = Two_Two_Sum(bdxbdx1, bdxbdx0, bdybdy1, bdybdy0)
         }
         if (adxtail != 0.0) || (adytail != 0.0) || (bdxtail != 0.0) || (bdytail != 0.0) {
-            cdxcdx1 = (cdx * cdx); c = (splitter * cdx); abig = (c - cdx); ahi = c - abig; alo = cdx - ahi; err1 = cdxcdx1 - (ahi * ahi); err3 = err1 - ((ahi + ahi) * alo); cdxcdx0 = (alo * alo) - err3
-            cdycdy1 = (cdy * cdy); c = (splitter * cdy); abig = (c - cdy); ahi = c - abig; alo = cdy - ahi; err1 = cdycdy1 - (ahi * ahi); err3 = err1 - ((ahi + ahi) * alo); cdycdy0 = (alo * alo) - err3
-            _i = (cdxcdx0 + cdycdy0); bvirt = (_i - cdxcdx0); avirt = _i - bvirt; bround = cdycdy0 - bvirt; around = cdxcdx0 - avirt; cc[0] = around + bround; _j = (cdxcdx1 + _i); bvirt = (_j - cdxcdx1); avirt = _j - bvirt; bround = _i - bvirt; around = cdxcdx1 - avirt; _0 = around + bround; _i = (_0 + cdycdy1); bvirt = (_i - _0); avirt = _i - bvirt; bround = cdycdy1 - bvirt; around = _0 - avirt; cc[1] = around + bround; cc3 = (_j + _i); bvirt = (cc3 - _j); avirt = cc3 - bvirt; bround = _i - bvirt; around = _j - avirt; cc[2] = around + bround
-            cc[3] = cc3
-        }
+            let (cdxcdx1, cdxcdx0) = Square(cdx)
+            let (cdycdy1, cdycdy0) = Square(cdy)
+            cc = Two_Two_Sum(cdxcdx1, cdxcdx0, cdycdy1, cdycdy0)
 
+        }
+        var finnow = fin1
+        var finother = fin1
+        var finswap = [REAL]()
+        var axtbc = [REAL]()
         if adxtail != 0.0 {
-            axtbclen = scaleExpansionZeroElim(elen: 4, e: bc, b: adxtail, h: &axtbc)
-            temp16alen = scaleExpansionZeroElim(elen: axtbclen, e: axtbc, b: 2.0 * adx, h: &temp16a)
+            axtbc  = scale_expansion_zeroelim(e: bc, b: adxtail)
+            let temp16a = scale_expansion_zeroelim(e: axtbc, b: 2.0 * adx)
 
-            axtcclen = scaleExpansionZeroElim(elen: 4, e: cc, b: adxtail, h: &axtcc)
-            temp16blen = scaleExpansionZeroElim(elen: axtcclen, e: axtcc, b: bdy, h: &temp16b)
+            let axtcc = scale_expansion_zeroelim(e: cc, b: adxtail)
+            let temp16b = scale_expansion_zeroelim(e: axtcc, b: bdy)
 
-            axtbblen = scaleExpansionZeroElim(elen: 4, e: bb, b: adxtail, h: &axtbb)
-            temp16clen = scaleExpansionZeroElim(elen: axtbblen, e: axtbb, b: -cdy, h: &temp16c)
+            let axtbb = scale_expansion_zeroelim(e: bb, b: adxtail)
+            let temp16c = scale_expansion_zeroelim(e: axtbb, b: -cdy)
 
-            temp32alen = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp16blen, f: temp16b, h: &temp32a)
-            temp48len = fastExpansionSumZeroElim(elen: temp16clen, e: temp16c, flen: temp32alen, f: temp32a, h: &temp48)
-            finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp48len, f: temp48, h: &finother)
-            finswap = finnow; finnow = finother; finother = finswap
+            let temp32a = fast_expansion_sum_zeroelim(temp16a, temp16b)
+            let temp48 = fast_expansion_sum_zeroelim(temp16c, temp32a)
+            finother = fast_expansion_sum_zeroelim(finnow, temp48)
+            finswap = finnow
+            finnow = finother
+            finother = finswap
         }
+
+        var aytbc = [REAL]()
         if adytail != 0.0 {
-            aytbclen = scaleExpansionZeroElim(elen: 4, e: bc, b: adytail, h: &aytbc)
-            temp16alen = scaleExpansionZeroElim(elen: aytbclen, e: aytbc, b: 2.0 * ady, h: &temp16a)
+            aytbc = scale_expansion_zeroelim(e: bc, b: adytail)
+            let temp16a = scale_expansion_zeroelim(e: aytbc, b: 2.0 * ady)
 
-            aytbblen = scaleExpansionZeroElim(elen: 4, e: bb, b: adytail, h: &aytbb)
-            temp16blen = scaleExpansionZeroElim(elen: aytbblen, e: aytbb, b: cdx, h: &temp16b)
+            let aytbb = scale_expansion_zeroelim(e: bb, b: adytail)
+            let temp16b = scale_expansion_zeroelim(e: aytbb, b: cdx)
 
-            aytcclen = scaleExpansionZeroElim(elen: 4, e: cc, b: adytail, h: &aytcc)
-            temp16clen = scaleExpansionZeroElim(elen: aytcclen, e: aytcc, b: -bdx, h: &temp16c)
+            let aytcc = scale_expansion_zeroelim(e: cc, b: adytail)
+            let temp16c = scale_expansion_zeroelim(e: aytcc, b: -bdx)
 
-            temp32alen = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp16blen, f: temp16b, h: &temp32a)
-            temp48len = fastExpansionSumZeroElim(elen: temp16clen, e: temp16c, flen: temp32alen, f: temp32a, h: &temp48)
-            finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp48len, f: temp48, h: &finother)
-            finswap = finnow; finnow = finother; finother = finswap
+            let temp32a = fast_expansion_sum_zeroelim(temp16a, temp16b)
+            let temp48 = fast_expansion_sum_zeroelim(temp16c, temp32a)
+            finother = fast_expansion_sum_zeroelim(finnow, temp48)
+            finswap = finnow
+            finnow = finother
+            finother = finswap
         }
+
+        var bxtca = [REAL]()
         if bdxtail != 0.0 {
-            bxtcalen = scaleExpansionZeroElim(elen: 4, e: ca, b: bdxtail, h: &bxtca)
-            temp16alen = scaleExpansionZeroElim(elen: bxtcalen, e: bxtca, b: 2.0 * bdx, h: &temp16a)
+            bxtca = scale_expansion_zeroelim(e: ca, b: bdxtail)
+            let temp16a = scale_expansion_zeroelim(e: bxtca, b: 2.0 * bdx)
 
-            bxtaalen = scaleExpansionZeroElim(elen: 4, e: aa, b: bdxtail, h: &bxtaa)
-            temp16blen = scaleExpansionZeroElim(elen: bxtaalen, e: bxtaa, b: cdy, h: &temp16b)
+            let bxtaa = scale_expansion_zeroelim(e: aa, b: bdxtail)
+            let temp16b = scale_expansion_zeroelim(e: bxtaa, b: cdy)
 
-            bxtcclen = scaleExpansionZeroElim(elen: 4, e: cc, b: bdxtail, h: &bxtcc)
-            temp16clen = scaleExpansionZeroElim(elen: bxtcclen, e: bxtcc, b: -ady, h: &temp16c)
+            let bxtcc = scale_expansion_zeroelim(e: cc, b: bdxtail)
+            let temp16c = scale_expansion_zeroelim(e: bxtcc, b: -ady)
 
-            temp32alen = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp16blen, f: temp16b, h: &temp32a)
-            temp48len = fastExpansionSumZeroElim(elen: temp16clen, e: temp16c, flen: temp32alen, f: temp32a, h: &temp48)
-            finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp48len, f: temp48, h: &finother)
+            let temp32a = fast_expansion_sum_zeroelim(temp16a, temp16b)
+            let temp48 = fast_expansion_sum_zeroelim(temp16c, temp32a)
+            finother = fast_expansion_sum_zeroelim(finnow, temp48)
             finswap = finnow; finnow = finother; finother = finswap
         }
+        var bytca = [REAL]()
         if bdytail != 0.0 {
-            bytcalen = scaleExpansionZeroElim(elen: 4, e: ca, b: bdytail, h: &bytca)
-            temp16alen = scaleExpansionZeroElim(elen: bytcalen, e: bytca, b: 2.0 * bdy, h: &temp16a)
+            bytca = scale_expansion_zeroelim(e: ca, b: bdytail)
+            let temp16a = scale_expansion_zeroelim(e: bytca, b: 2.0 * bdy)
 
-            bytcclen = scaleExpansionZeroElim(elen: 4, e: cc, b: bdytail, h: &bytcc)
-            temp16blen = scaleExpansionZeroElim(elen: bytcclen, e: bytcc, b: adx, h: &temp16b)
+            let bytcc = scale_expansion_zeroelim(e: cc, b: bdytail)
+            let temp16b = scale_expansion_zeroelim(e: bytcc, b: adx)
 
-            bytaalen = scaleExpansionZeroElim(elen: 4, e: aa, b: bdytail, h: &bytaa)
-            temp16clen = scaleExpansionZeroElim(elen: bytaalen, e: bytaa, b: -cdx, h: &temp16c)
+            let bytaa = scale_expansion_zeroelim(e: aa, b: bdytail)
+            let temp16c = scale_expansion_zeroelim(e: bytaa, b: -cdx)
 
-            temp32alen = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp16blen, f: temp16b, h: &temp32a)
-            temp48len = fastExpansionSumZeroElim(elen: temp16clen, e: temp16c, flen: temp32alen, f: temp32a, h: &temp48)
-            finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp48len, f: temp48, h: &finother)
+            let temp32a = fast_expansion_sum_zeroelim(temp16a, temp16b)
+            let temp48 = fast_expansion_sum_zeroelim(temp16c, temp32a)
+            finother = fast_expansion_sum_zeroelim(finnow, temp48)
             finswap = finnow; finnow = finother; finother = finswap
         }
+
+        var cxtab = [REAL]()
         if cdxtail != 0.0 {
-            cxtablen = scaleExpansionZeroElim(elen: 4, e: ab, b: cdxtail, h: &cxtab)
-            temp16alen = scaleExpansionZeroElim(elen: cxtablen, e: cxtab, b: 2.0 * cdx, h: &temp16a)
+            cxtab = scale_expansion_zeroelim(e: ab, b: cdxtail)
+            let temp16a = scale_expansion_zeroelim(e: cxtab, b: 2.0 * cdx)
 
-            cxtbblen = scaleExpansionZeroElim(elen: 4, e: bb, b: cdxtail, h: &cxtbb)
-            temp16blen = scaleExpansionZeroElim(elen: cxtbblen, e: cxtbb, b: ady, h: &temp16b)
+            let cxtbb = scale_expansion_zeroelim(e: bb, b: cdxtail)
+            let temp16b = scale_expansion_zeroelim(e: cxtbb, b: ady)
 
-            cxtaalen = scaleExpansionZeroElim(elen: 4, e: aa, b: cdxtail, h: &cxtaa)
-            temp16clen = scaleExpansionZeroElim(elen: cxtaalen, e: cxtaa, b: -bdy, h: &temp16c)
+            let cxtaa = scale_expansion_zeroelim(e: aa, b: cdxtail)
+            let temp16c = scale_expansion_zeroelim(e: cxtaa, b: -bdy)
 
-            temp32alen = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp16blen, f: temp16b, h: &temp32a)
-            temp48len = fastExpansionSumZeroElim(elen: temp16clen, e: temp16c, flen: temp32alen, f: temp32a, h: &temp48)
-            finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp48len, f: temp48, h: &finother)
+            let temp32a = fast_expansion_sum_zeroelim(temp16a, temp16b)
+            let temp48 = fast_expansion_sum_zeroelim(temp16c, temp32a)
+            finother = fast_expansion_sum_zeroelim(finnow, temp48)
             finswap = finnow; finnow = finother; finother = finswap
         }
+        var cytab = [REAL]()
         if cdytail != 0.0 {
-            cytablen = scaleExpansionZeroElim(elen: 4, e: ab, b: cdytail, h: &cytab)
-            temp16alen = scaleExpansionZeroElim(elen: cytablen, e: cytab, b: 2.0 * cdy, h: &temp16a)
+            cytab = scale_expansion_zeroelim(e: ab, b: cdytail)
+            let temp16a = scale_expansion_zeroelim(e: cytab, b: 2.0 * cdy)
 
-            cytaalen = scaleExpansionZeroElim(elen: 4, e: aa, b: cdytail, h: &cytaa)
-            temp16blen = scaleExpansionZeroElim(elen: cytaalen, e: cytaa, b: bdx, h: &temp16b)
+            let cytaa = scale_expansion_zeroelim(e: aa, b: cdytail)
+            let temp16b = scale_expansion_zeroelim(e: cytaa, b: bdx)
 
-            cytbblen = scaleExpansionZeroElim(elen: 4, e: bb, b: cdytail, h: &cytbb)
-            temp16clen = scaleExpansionZeroElim(elen: cytbblen, e: cytbb, b: -adx, h: &temp16c)
+            let cytbb = scale_expansion_zeroelim(e: bb, b: cdytail)
+            let temp16c = scale_expansion_zeroelim(e: cytbb, b: -adx)
 
-            temp32alen = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp16blen, f: temp16b, h: &temp32a)
-            temp48len = fastExpansionSumZeroElim(elen: temp16clen, e: temp16c, flen: temp32alen, f: temp32a, h: &temp48)
-            finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp48len, f: temp48, h: &finother)
+            let temp32a = fast_expansion_sum_zeroelim(temp16a, temp16b)
+            let temp48 = fast_expansion_sum_zeroelim(temp16c, temp32a)
+            finother = fast_expansion_sum_zeroelim(finnow, temp48)
             finswap = finnow; finnow = finother; finother = finswap
         }
 
+        var ti1: REAL = 0, ti0: REAL = 0, tj1: REAL = 0, tj0: REAL = 0
+        var negate: REAL = 0
+        var bctt: [REAL]
+        var bct: [REAL]
         if (adxtail != 0.0) || (adytail != 0.0) {
             if (bdxtail != 0.0) || (bdytail != 0.0)
                 || (cdxtail != 0.0) || (cdytail != 0.0) {
-                ti1 = (bdxtail * cdy); c = (splitter * bdxtail); abig = (c - bdxtail); ahi = c - abig; alo = bdxtail - ahi; c = (splitter * cdy); abig = (c - cdy); bhi = c - abig; blo = cdy - bhi; err1 = ti1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); ti0 = (alo * blo) - err3
-                tj1 = (bdx * cdytail); c = (splitter * bdx); abig = (c - bdx); ahi = c - abig; alo = bdx - ahi; c = (splitter * cdytail); abig = (c - cdytail); bhi = c - abig; blo = cdytail - bhi; err1 = tj1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); tj0 = (alo * blo) - err3
-                _i = (ti0 + tj0); bvirt = (_i - ti0); avirt = _i - bvirt; bround = tj0 - bvirt; around = ti0 - avirt; u[0] = around + bround; _j = (ti1 + _i); bvirt = (_j - ti1); avirt = _j - bvirt; bround = _i - bvirt; around = ti1 - avirt; _0 = around + bround; _i = (_0 + tj1); bvirt = (_i - _0); avirt = _i - bvirt; bround = tj1 - bvirt; around = _0 - avirt; u[1] = around + bround; u3 = (_j + _i); bvirt = (u3 - _j); avirt = u3 - bvirt; bround = _i - bvirt; around = _j - avirt; u[2] = around + bround
-                u[3] = u3
+                Two_Product(bdxtail, cdy, &ti1, &ti0)
+                Two_Product(bdx, cdytail, &tj1, &tj0)
+                let u = Two_Two_Sum(ti1, ti0, tj1, tj0)
                 negate = -bdy
-                ti1 = (cdxtail * negate); c = (splitter * cdxtail); abig = (c - cdxtail); ahi = c - abig; alo = cdxtail - ahi; c = (splitter * negate); abig = (c - negate); bhi = c - abig; blo = negate - bhi; err1 = ti1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); ti0 = (alo * blo) - err3
+                Two_Product(cdxtail, negate, &ti1, &ti0)
                 negate = -bdytail
-                tj1 = (cdx * negate); c = (splitter * cdx); abig = (c - cdx); ahi = c - abig; alo = cdx - ahi; c = (splitter * negate); abig = (c - negate); bhi = c - abig; blo = negate - bhi; err1 = tj1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); tj0 = (alo * blo) - err3
-                _i = (ti0 + tj0); bvirt = (_i - ti0); avirt = _i - bvirt; bround = tj0 - bvirt; around = ti0 - avirt; v[0] = around + bround; _j = (ti1 + _i); bvirt = (_j - ti1); avirt = _j - bvirt; bround = _i - bvirt; around = ti1 - avirt; _0 = around + bround; _i = (_0 + tj1); bvirt = (_i - _0); avirt = _i - bvirt; bround = tj1 - bvirt; around = _0 - avirt; v[1] = around + bround; v3 = (_j + _i); bvirt = (v3 - _j); avirt = v3 - bvirt; bround = _i - bvirt; around = _j - avirt; v[2] = around + bround
-                v[3] = v3
-                bctlen = fastExpansionSumZeroElim(elen: 4, e: u, flen: 4, f: v, h: &bct)
+                Two_Product(cdx, negate, &tj1, &tj0)
+                let v = Two_Two_Sum(ti1, ti0, tj1, tj0)
+                bct = fast_expansion_sum_zeroelim(u, v)
 
-                ti1 = (bdxtail * cdytail); c = (splitter * bdxtail); abig = (c - bdxtail); ahi = c - abig; alo = bdxtail - ahi; c = (splitter * cdytail); abig = (c - cdytail); bhi = c - abig; blo = cdytail - bhi; err1 = ti1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); ti0 = (alo * blo) - err3
-                tj1 = (cdxtail * bdytail); c = (splitter * cdxtail); abig = (c - cdxtail); ahi = c - abig; alo = cdxtail - ahi; c = (splitter * bdytail); abig = (c - bdytail); bhi = c - abig; blo = bdytail - bhi; err1 = tj1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); tj0 = (alo * blo) - err3
-                _i = (ti0 - tj0); bvirt = (ti0 - _i); avirt = _i + bvirt; bround = bvirt - tj0; around = ti0 - avirt; bctt[0] = around + bround; _j = (ti1 + _i); bvirt = (_j - ti1); avirt = _j - bvirt; bround = _i - bvirt; around = ti1 - avirt; _0 = around + bround; _i = (_0 - tj1); bvirt = (_0 - _i); avirt = _i + bvirt; bround = bvirt - tj1; around = _0 - avirt; bctt[1] = around + bround; bctt3 = (_j + _i); bvirt = (bctt3 - _j); avirt = bctt3 - bvirt; bround = _i - bvirt; around = _j - avirt; bctt[2] = around + bround
-                bctt[3] = bctt3
-                bcttlen = 4
+                Two_Product(bdxtail, cdytail, &ti1, &ti0)
+                Two_Product(cdxtail, bdytail, &tj1, &tj0)
+                bctt = Two_Two_Diff(ti1, ti0, tj1, tj0)
             } else {
-                bct[0] = 0.0
-                bctlen = 1
-                bctt[0] = 0.0
-                bcttlen = 1
+                bct = [0]
+                bctt = [0]
             }
 
             if adxtail != 0.0 {
-                temp16alen = scaleExpansionZeroElim(elen: axtbclen, e: axtbc, b: adxtail, h: &temp16a)
-                axtbctlen = scaleExpansionZeroElim(elen: bctlen, e: bct, b: adxtail, h: &axtbct)
-                temp32alen = scaleExpansionZeroElim(elen: axtbctlen, e: axtbct, b: 2.0 * adx, h: &temp32a)
-                temp48len = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp32alen, f: temp32a, h: &temp48)
-                finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp48len, f: temp48, h: &finother)
+                var temp16a = scale_expansion_zeroelim(e: axtbc, b: adxtail)
+                let axtbct = scale_expansion_zeroelim(e: bct, b: adxtail)
+                var temp32a = scale_expansion_zeroelim(e: axtbct, b: 2.0 * adx)
+                let temp48 = fast_expansion_sum_zeroelim(temp16a, temp32a)
+                finother = fast_expansion_sum_zeroelim(finnow, temp48)
                 finswap = finnow; finnow = finother; finother = finswap
                 if bdytail != 0.0 {
-                    temp8len = scaleExpansionZeroElim(elen: 4, e: cc, b: adxtail, h: &temp8)
-                    temp16alen = scaleExpansionZeroElim(elen: temp8len, e: temp8, b: bdytail, h: &temp16a)
-                    finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp16alen, f: temp16a, h: &finother)
+                    let temp8 = scale_expansion_zeroelim(e: cc, b: adxtail)
+                    let temp16a = scale_expansion_zeroelim(e: temp8, b: bdytail)
+                    finother = fast_expansion_sum_zeroelim(finnow, temp16a)
                     finswap = finnow; finnow = finother; finother = finswap
                 }
                 if cdytail != 0.0 {
-                    temp8len = scaleExpansionZeroElim(elen: 4, e: bb, b: -adxtail, h: &temp8)
-                    temp16alen = scaleExpansionZeroElim(elen: temp8len, e: temp8, b: cdytail, h: &temp16a)
-                    finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp16alen, f: temp16a, h: &finother)
+                    let temp8 = scale_expansion_zeroelim(e: bb, b: -adxtail)
+                    let temp16a = scale_expansion_zeroelim(e: temp8, b: cdytail)
+                    finother = fast_expansion_sum_zeroelim(finnow, temp16a)
                     finswap = finnow; finnow = finother; finother = finswap
                 }
 
-                temp32alen = scaleExpansionZeroElim(elen: axtbctlen, e: axtbct, b: adxtail, h: &temp32a)
-                axtbcttlen = scaleExpansionZeroElim(elen: bcttlen, e: bctt, b: adxtail, h: &axtbctt)
-                temp16alen = scaleExpansionZeroElim(elen: axtbcttlen, e: axtbctt, b: 2.0 * adx, h: &temp16a)
-                temp16blen = scaleExpansionZeroElim(elen: axtbcttlen, e: axtbctt, b: adxtail, h: &temp16b)
-                temp32blen = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp16blen, f: temp16b, h: &temp32b)
-                temp64len = fastExpansionSumZeroElim(elen: temp32alen, e: temp32a, flen: temp32blen, f: temp32b, h: &temp64)
-                finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp64len, f: temp64, h: &finother)
+                temp32a = scale_expansion_zeroelim(e: axtbct, b: adxtail)
+                let axtbctt = scale_expansion_zeroelim(e: bctt, b: adxtail)
+                temp16a = scale_expansion_zeroelim(e: axtbctt, b: 2.0 * adx)
+                let temp16b = scale_expansion_zeroelim(e: axtbctt, b: adxtail)
+                let temp32b = fast_expansion_sum_zeroelim(temp16a, temp16b)
+                let temp64 = fast_expansion_sum_zeroelim(temp32a, temp32b)
+                finother = fast_expansion_sum_zeroelim(finnow, temp64)
                 finswap = finnow; finnow = finother; finother = finswap
             }
             if adytail != 0.0 {
-                temp16alen = scaleExpansionZeroElim(elen: aytbclen, e: aytbc, b: adytail, h: &temp16a)
-                aytbctlen = scaleExpansionZeroElim(elen: bctlen, e: bct, b: adytail, h: &aytbct)
-                temp32alen = scaleExpansionZeroElim(elen: aytbctlen, e: aytbct, b: 2.0 * ady, h: &temp32a)
-                temp48len = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp32alen, f: temp32a, h: &temp48)
-                finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp48len, f: temp48, h: &finother)
+                var temp16a = scale_expansion_zeroelim(e: aytbc, b: adytail)
+                let aytbct = scale_expansion_zeroelim(e: bct, b: adytail)
+                var temp32a = scale_expansion_zeroelim(e: aytbct, b: 2.0 * ady)
+                let temp48 = fast_expansion_sum_zeroelim(temp16a, temp32a)
+                finother = fast_expansion_sum_zeroelim(finnow, temp48)
                 finswap = finnow; finnow = finother; finother = finswap
 
-                temp32alen = scaleExpansionZeroElim(elen: aytbctlen, e: aytbct, b: adytail, h: &temp32a)
-                aytbcttlen = scaleExpansionZeroElim(elen: bcttlen, e: bctt, b: adytail, h: &aytbctt)
-                temp16alen = scaleExpansionZeroElim(elen: aytbcttlen, e: aytbctt, b: 2.0 * ady, h: &temp16a)
-                temp16blen = scaleExpansionZeroElim(elen: aytbcttlen, e: aytbctt, b: adytail, h: &temp16b)
-                temp32blen = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp16blen, f: temp16b, h: &temp32b)
-                temp64len = fastExpansionSumZeroElim(elen: temp32alen, e: temp32a, flen: temp32blen, f: temp32b, h: &temp64)
-                finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp64len, f: temp64, h: &finother)
+                temp32a = scale_expansion_zeroelim(e: aytbct, b: adytail)
+                let aytbctt = scale_expansion_zeroelim(e: bctt, b: adytail)
+                temp16a = scale_expansion_zeroelim(e: aytbctt, b: 2.0 * ady)
+                let temp16b = scale_expansion_zeroelim(e: aytbctt, b: adytail)
+                let temp32b = fast_expansion_sum_zeroelim(temp16a, temp16b)
+                let temp64 = fast_expansion_sum_zeroelim(temp32a, temp32b)
+                finother = fast_expansion_sum_zeroelim(finnow, temp64)
                 finswap = finnow; finnow = finother; finother = finswap
             }
         }
+
+        var cat: [REAL]
+        var catt: [REAL]
         if (bdxtail != 0.0) || (bdytail != 0.0) {
             if (cdxtail != 0.0) || (cdytail != 0.0)
                 || (adxtail != 0.0) || (adytail != 0.0) {
-                ti1 = (cdxtail * ady); c = (splitter * cdxtail); abig = (c - cdxtail); ahi = c - abig; alo = cdxtail - ahi; c = (splitter * ady); abig = (c - ady); bhi = c - abig; blo = ady - bhi; err1 = ti1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); ti0 = (alo * blo) - err3
-                tj1 = (cdx * adytail); c = (splitter * cdx); abig = (c - cdx); ahi = c - abig; alo = cdx - ahi; c = (splitter * adytail); abig = (c - adytail); bhi = c - abig; blo = adytail - bhi; err1 = tj1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); tj0 = (alo * blo) - err3
-                _i = (ti0 + tj0); bvirt = (_i - ti0); avirt = _i - bvirt; bround = tj0 - bvirt; around = ti0 - avirt; u[0] = around + bround; _j = (ti1 + _i); bvirt = (_j - ti1); avirt = _j - bvirt; bround = _i - bvirt; around = ti1 - avirt; _0 = around + bround; _i = (_0 + tj1); bvirt = (_i - _0); avirt = _i - bvirt; bround = tj1 - bvirt; around = _0 - avirt; u[1] = around + bround; u3 = (_j + _i); bvirt = (u3 - _j); avirt = u3 - bvirt; bround = _i - bvirt; around = _j - avirt; u[2] = around + bround
-                u[3] = u3
-                negate = -cdy
-                ti1 = (adxtail * negate); c = (splitter * adxtail); abig = (c - adxtail); ahi = c - abig; alo = adxtail - ahi; c = (splitter * negate); abig = (c - negate); bhi = c - abig; blo = negate - bhi; err1 = ti1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); ti0 = (alo * blo) - err3
-                negate = -cdytail
-                tj1 = (adx * negate); c = (splitter * adx); abig = (c - adx); ahi = c - abig; alo = adx - ahi; c = (splitter * negate); abig = (c - negate); bhi = c - abig; blo = negate - bhi; err1 = tj1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); tj0 = (alo * blo) - err3
-                _i = (ti0 + tj0); bvirt = (_i - ti0); avirt = _i - bvirt; bround = tj0 - bvirt; around = ti0 - avirt; v[0] = around + bround; _j = (ti1 + _i); bvirt = (_j - ti1); avirt = _j - bvirt; bround = _i - bvirt; around = ti1 - avirt; _0 = around + bround; _i = (_0 + tj1); bvirt = (_i - _0); avirt = _i - bvirt; bround = tj1 - bvirt; around = _0 - avirt; v[1] = around + bround; v3 = (_j + _i); bvirt = (v3 - _j); avirt = v3 - bvirt; bround = _i - bvirt; around = _j - avirt; v[2] = around + bround
-                v[3] = v3
-                catlen = fastExpansionSumZeroElim(elen: 4, e: u, flen: 4, f: v, h: &cat)
+                Two_Product(cdxtail, ady, &ti1, &ti0)
+                Two_Product(cdx, adytail, &tj1, &tj0)
+                let u = Two_Two_Sum(ti1, ti0, tj1, tj0)
 
-                ti1 = (cdxtail * adytail); c = (splitter * cdxtail); abig = (c - cdxtail); ahi = c - abig; alo = cdxtail - ahi; c = (splitter * adytail); abig = (c - adytail); bhi = c - abig; blo = adytail - bhi; err1 = ti1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); ti0 = (alo * blo) - err3
-                tj1 = (adxtail * cdytail); c = (splitter * adxtail); abig = (c - adxtail); ahi = c - abig; alo = adxtail - ahi; c = (splitter * cdytail); abig = (c - cdytail); bhi = c - abig; blo = cdytail - bhi; err1 = tj1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); tj0 = (alo * blo) - err3
-                _i = (ti0 - tj0); bvirt = (ti0 - _i); avirt = _i + bvirt; bround = bvirt - tj0; around = ti0 - avirt; catt[0] = around + bround; _j = (ti1 + _i); bvirt = (_j - ti1); avirt = _j - bvirt; bround = _i - bvirt; around = ti1 - avirt; _0 = around + bround; _i = (_0 - tj1); bvirt = (_0 - _i); avirt = _i + bvirt; bround = bvirt - tj1; around = _0 - avirt; catt[1] = around + bround; catt3 = (_j + _i); bvirt = (catt3 - _j); avirt = catt3 - bvirt; bround = _i - bvirt; around = _j - avirt; catt[2] = around + bround
-                catt[3] = catt3
-                cattlen = 4
+                negate = -cdy
+                Two_Product(adxtail, negate, &ti1, &ti0)
+                negate = -cdytail
+                Two_Product(adx, negate, &tj1, &tj0)
+                let v = Two_Two_Sum(ti1, ti0, tj1, tj0)
+                cat = fast_expansion_sum_zeroelim(u, v)
+
+                Two_Product(cdxtail, adytail, &ti1, &ti0)
+                Two_Product(adxtail, cdytail, &tj1, &tj0)
+                catt = Two_Two_Diff(ti1, ti0, tj1, tj0)
+
             } else {
-                cat[0] = 0.0
-                catlen = 1
-                catt[0] = 0.0
-                cattlen = 1
+                cat = [0]
+                catt = [0]
             }
 
             if bdxtail != 0.0 {
-                temp16alen = scaleExpansionZeroElim(elen: bxtcalen, e: bxtca, b: bdxtail, h: &temp16a)
-                bxtcatlen = scaleExpansionZeroElim(elen: catlen, e: cat, b: bdxtail, h: &bxtcat)
-                temp32alen = scaleExpansionZeroElim(elen: bxtcatlen, e: bxtcat, b: 2.0 * bdx, h: &temp32a)
-                temp48len = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp32alen, f: temp32a, h: &temp48)
-                finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp48len, f: temp48, h: &finother)
+                var temp16a = scale_expansion_zeroelim(e: bxtca, b: bdxtail)
+                let bxtcat = scale_expansion_zeroelim(e: cat, b: bdxtail)
+                var temp32a = scale_expansion_zeroelim(e: bxtcat, b: 2.0 * bdx)
+                let temp48 = fast_expansion_sum_zeroelim(temp16a, temp32a)
+                finother = fast_expansion_sum_zeroelim(finnow, temp48)
                 finswap = finnow; finnow = finother; finother = finswap
                 if cdytail != 0.0 {
-                    temp8len = scaleExpansionZeroElim(elen: 4, e: aa, b: bdxtail, h: &temp8)
-                    temp16alen = scaleExpansionZeroElim(elen: temp8len, e: temp8, b: cdytail, h: &temp16a)
-                    finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp16alen, f: temp16a, h: &finother)
+                    let temp8 = scale_expansion_zeroelim(e: aa, b: bdxtail)
+                    let temp16a = scale_expansion_zeroelim(e: temp8, b: cdytail)
+                    finother = fast_expansion_sum_zeroelim(finnow, temp16a)
                     finswap = finnow; finnow = finother; finother = finswap
                 }
                 if adytail != 0.0 {
-                    temp8len = scaleExpansionZeroElim(elen: 4, e: cc, b: -bdxtail, h: &temp8)
-                    temp16alen = scaleExpansionZeroElim(elen: temp8len, e: temp8, b: adytail, h: &temp16a)
-                    finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp16alen, f: temp16a, h: &finother)
+                    let temp8 = scale_expansion_zeroelim(e: cc, b: -bdxtail)
+                    let temp16a = scale_expansion_zeroelim(e: temp8, b: adytail)
+                    finother = fast_expansion_sum_zeroelim(finnow, temp16a)
                     finswap = finnow; finnow = finother; finother = finswap
                 }
 
-                temp32alen = scaleExpansionZeroElim(elen: bxtcatlen, e: bxtcat, b: bdxtail, h: &temp32a)
-                bxtcattlen = scaleExpansionZeroElim(elen: cattlen, e: catt, b: bdxtail, h: &bxtcatt)
-                temp16alen = scaleExpansionZeroElim(elen: bxtcattlen, e: bxtcatt, b: 2.0 * bdx, h: &temp16a)
-                temp16blen = scaleExpansionZeroElim(elen: bxtcattlen, e: bxtcatt, b: bdxtail, h: &temp16b)
-                temp32blen = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp16blen, f: temp16b, h: &temp32b)
-                temp64len = fastExpansionSumZeroElim(elen: temp32alen, e: temp32a, flen: temp32blen, f: temp32b, h: &temp64)
-                finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp64len, f: temp64, h: &finother)
+                temp32a = scale_expansion_zeroelim(e: bxtcat, b: bdxtail)
+                let bxtcatt = scale_expansion_zeroelim(e: catt, b: bdxtail)
+                temp16a = scale_expansion_zeroelim(e: bxtcatt, b: 2.0 * bdx)
+                let temp16b = scale_expansion_zeroelim(e: bxtcatt, b: bdxtail)
+                let temp32b = fast_expansion_sum_zeroelim(temp16a, temp16b)
+                let temp64 = fast_expansion_sum_zeroelim(temp32a, temp32b)
+                finother = fast_expansion_sum_zeroelim(finnow, temp64)
                 finswap = finnow; finnow = finother; finother = finswap
             }
             if bdytail != 0.0 {
-                temp16alen = scaleExpansionZeroElim(elen: bytcalen, e: bytca, b: bdytail, h: &temp16a)
-                bytcatlen = scaleExpansionZeroElim(elen: catlen, e: cat, b: bdytail, h: &bytcat)
-                temp32alen = scaleExpansionZeroElim(elen: bytcatlen, e: bytcat, b: 2.0 * bdy, h: &temp32a)
-                temp48len = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp32alen, f: temp32a, h: &temp48)
-                finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp48len, f: temp48, h: &finother)
+                var temp16a = scale_expansion_zeroelim(e: bytca, b: bdytail)
+                let bytcat = scale_expansion_zeroelim(e: cat, b: bdytail)
+                var temp32a = scale_expansion_zeroelim(e: bytcat, b: 2.0 * bdy)
+                let temp48 = fast_expansion_sum_zeroelim(temp16a, temp32a)
+                finother = fast_expansion_sum_zeroelim(finnow, temp48)
                 finswap = finnow; finnow = finother; finother = finswap
 
-                temp32alen = scaleExpansionZeroElim(elen: bytcatlen, e: bytcat, b: bdytail, h: &temp32a)
-                bytcattlen = scaleExpansionZeroElim(elen: cattlen, e: catt, b: bdytail, h: &bytcatt)
-                temp16alen = scaleExpansionZeroElim(elen: bytcattlen, e: bytcatt, b: 2.0 * bdy, h: &temp16a)
-                temp16blen = scaleExpansionZeroElim(elen: bytcattlen, e: bytcatt, b: bdytail, h: &temp16b)
-                temp32blen = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp16blen, f: temp16b, h: &temp32b)
-                temp64len = fastExpansionSumZeroElim(elen: temp32alen, e: temp32a, flen: temp32blen, f: temp32b, h: &temp64)
-                finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp64len, f: temp64, h: &finother)
+                temp32a = scale_expansion_zeroelim(e: bytcat, b: bdytail)
+                let bytcatt = scale_expansion_zeroelim(e: catt, b: bdytail)
+                temp16a = scale_expansion_zeroelim(e: bytcatt, b: 2.0 * bdy)
+                let temp16b = scale_expansion_zeroelim(e: bytcatt, b: bdytail)
+                let temp32b = fast_expansion_sum_zeroelim(temp16a, temp16b)
+                let temp64 = fast_expansion_sum_zeroelim(temp32a, temp32b)
+                finother = fast_expansion_sum_zeroelim(finnow, temp64)
                 finswap = finnow; finnow = finother; finother = finswap
             }
         }
+        var abt: [REAL]
+        var abtt: [REAL]
+
         if (cdxtail != 0.0) || (cdytail != 0.0) {
+
             if (adxtail != 0.0) || (adytail != 0.0)
                 || (bdxtail != 0.0) || (bdytail != 0.0) {
-                ti1 = (adxtail * bdy); c = (splitter * adxtail); abig = (c - adxtail); ahi = c - abig; alo = adxtail - ahi; c = (splitter * bdy); abig = (c - bdy); bhi = c - abig; blo = bdy - bhi; err1 = ti1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); ti0 = (alo * blo) - err3
-                tj1 = (adx * bdytail); c = (splitter * adx); abig = (c - adx); ahi = c - abig; alo = adx - ahi; c = (splitter * bdytail); abig = (c - bdytail); bhi = c - abig; blo = bdytail - bhi; err1 = tj1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); tj0 = (alo * blo) - err3
-                _i = (ti0 + tj0); bvirt = (_i - ti0); avirt = _i - bvirt; bround = tj0 - bvirt; around = ti0 - avirt; u[0] = around + bround; _j = (ti1 + _i); bvirt = (_j - ti1); avirt = _j - bvirt; bround = _i - bvirt; around = ti1 - avirt; _0 = around + bround; _i = (_0 + tj1); bvirt = (_i - _0); avirt = _i - bvirt; bround = tj1 - bvirt; around = _0 - avirt; u[1] = around + bround; u3 = (_j + _i); bvirt = (u3 - _j); avirt = u3 - bvirt; bround = _i - bvirt; around = _j - avirt; u[2] = around + bround
-                u[3] = u3
+                Two_Product(adxtail, bdy, &ti1, &ti0)
+                Two_Product(adx, bdytail, &tj1, &tj0)
+                let u = Two_Two_Sum(ti1, ti0, tj1, tj0)
                 negate = -ady
-                ti1 = (bdxtail * negate); c = (splitter * bdxtail); abig = (c - bdxtail); ahi = c - abig; alo = bdxtail - ahi; c = (splitter * negate); abig = (c - negate); bhi = c - abig; blo = negate - bhi; err1 = ti1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); ti0 = (alo * blo) - err3
+                Two_Product(bdxtail, negate, &ti1, &ti0)
                 negate = -adytail
-                tj1 = (bdx * negate); c = (splitter * bdx); abig = (c - bdx); ahi = c - abig; alo = bdx - ahi; c = (splitter * negate); abig = (c - negate); bhi = c - abig; blo = negate - bhi; err1 = tj1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); tj0 = (alo * blo) - err3
-                _i = (ti0 + tj0); bvirt = (_i - ti0); avirt = _i - bvirt; bround = tj0 - bvirt; around = ti0 - avirt; v[0] = around + bround; _j = (ti1 + _i); bvirt = (_j - ti1); avirt = _j - bvirt; bround = _i - bvirt; around = ti1 - avirt; _0 = around + bround; _i = (_0 + tj1); bvirt = (_i - _0); avirt = _i - bvirt; bround = tj1 - bvirt; around = _0 - avirt; v[1] = around + bround; v3 = (_j + _i); bvirt = (v3 - _j); avirt = v3 - bvirt; bround = _i - bvirt; around = _j - avirt; v[2] = around + bround
-                v[3] = v3
-                abtlen = fastExpansionSumZeroElim(elen: 4, e: u, flen: 4, f: v, h: &abt)
+                Two_Product(bdx, negate, &tj1, &tj0)
+                let v = Two_Two_Sum(ti1, ti0, tj1, tj0)
+                abt = fast_expansion_sum_zeroelim(u, v)
 
-                ti1 = (adxtail * bdytail); c = (splitter * adxtail); abig = (c - adxtail); ahi = c - abig; alo = adxtail - ahi; c = (splitter * bdytail); abig = (c - bdytail); bhi = c - abig; blo = bdytail - bhi; err1 = ti1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); ti0 = (alo * blo) - err3
-                tj1 = (bdxtail * adytail); c = (splitter * bdxtail); abig = (c - bdxtail); ahi = c - abig; alo = bdxtail - ahi; c = (splitter * adytail); abig = (c - adytail); bhi = c - abig; blo = adytail - bhi; err1 = tj1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); tj0 = (alo * blo) - err3
-                _i = (ti0 - tj0); bvirt = (ti0 - _i); avirt = _i + bvirt; bround = bvirt - tj0; around = ti0 - avirt; abtt[0] = around + bround; _j = (ti1 + _i); bvirt = (_j - ti1); avirt = _j - bvirt; bround = _i - bvirt; around = ti1 - avirt; _0 = around + bround; _i = (_0 - tj1); bvirt = (_0 - _i); avirt = _i + bvirt; bround = bvirt - tj1; around = _0 - avirt; abtt[1] = around + bround; abtt3 = (_j + _i); bvirt = (abtt3 - _j); avirt = abtt3 - bvirt; bround = _i - bvirt; around = _j - avirt; abtt[2] = around + bround
-                abtt[3] = abtt3
-                abttlen = 4
+                Two_Product(adxtail, bdytail, &ti1, &ti0)
+                Two_Product(bdxtail, adytail, &tj1, &tj0)
+                abtt = Two_Two_Diff(ti1, ti0, tj1, tj0)
+
             } else {
-                abt[0] = 0.0
-                abtlen = 1
-                abtt[0] = 0.0
-                abttlen = 1
+                abt = [0]
+                abtt = [0]
             }
 
             if cdxtail != 0.0 {
-                temp16alen = scaleExpansionZeroElim(elen: cxtablen, e: cxtab, b: cdxtail, h: &temp16a)
-                cxtabtlen = scaleExpansionZeroElim(elen: abtlen, e: abt, b: cdxtail, h: &cxtabt)
-                temp32alen = scaleExpansionZeroElim(elen: cxtabtlen, e: cxtabt, b: 2.0 * cdx, h: &temp32a)
-                temp48len = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp32alen, f: temp32a, h: &temp48)
-                finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp48len, f: temp48, h: &finother)
+                var temp16a = scale_expansion_zeroelim(e: cxtab, b: cdxtail)
+                let cxtabt = scale_expansion_zeroelim(e: abt, b: cdxtail)
+                var temp32a = scale_expansion_zeroelim(e: cxtabt, b: 2.0 * cdx)
+                let temp48 = fast_expansion_sum_zeroelim(temp16a, temp32a)
+                finother = fast_expansion_sum_zeroelim(finnow, temp48)
                 finswap = finnow; finnow = finother; finother = finswap
                 if adytail != 0.0 {
-                    temp8len = scaleExpansionZeroElim(elen: 4, e: bb, b: cdxtail, h: &temp8)
-                    temp16alen = scaleExpansionZeroElim(elen: temp8len, e: temp8, b: adytail, h: &temp16a)
-                    finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp16alen, f: temp16a, h: &finother)
+                    let temp8 = scale_expansion_zeroelim(e: bb, b: cdxtail)
+                    let temp16a = scale_expansion_zeroelim(e: temp8, b: adytail)
+                    finother = fast_expansion_sum_zeroelim(finnow, temp16a)
                     finswap = finnow; finnow = finother; finother = finswap
                 }
                 if bdytail != 0.0 {
-                    temp8len = scaleExpansionZeroElim(elen: 4, e: aa, b: -cdxtail, h: &temp8)
-                    temp16alen = scaleExpansionZeroElim(elen: temp8len, e: temp8, b: bdytail, h: &temp16a)
-                    finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp16alen, f: temp16a, h: &finother)
+                    let temp8 = scale_expansion_zeroelim(e: aa, b: -cdxtail)
+                    let temp16a = scale_expansion_zeroelim(e: temp8, b: bdytail)
+                    finother = fast_expansion_sum_zeroelim(finnow, temp16a)
                     finswap = finnow; finnow = finother; finother = finswap
                 }
 
-                temp32alen = scaleExpansionZeroElim(elen: cxtabtlen, e: cxtabt, b: cdxtail, h: &temp32a)
-                cxtabttlen = scaleExpansionZeroElim(elen: abttlen, e: abtt, b: cdxtail, h: &cxtabtt)
-                temp16alen = scaleExpansionZeroElim(elen: cxtabttlen, e: cxtabtt, b: 2.0 * cdx, h: &temp16a)
-                temp16blen = scaleExpansionZeroElim(elen: cxtabttlen, e: cxtabtt, b: cdxtail, h: &temp16b)
-                temp32blen = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp16blen, f: temp16b, h: &temp32b)
-                temp64len = fastExpansionSumZeroElim(elen: temp32alen, e: temp32a, flen: temp32blen, f: temp32b, h: &temp64)
-                finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp64len, f: temp64, h: &finother)
+                temp32a = scale_expansion_zeroelim(e: cxtabt, b: cdxtail)
+                let cxtabtt = scale_expansion_zeroelim(e: abtt, b: cdxtail)
+                temp16a = scale_expansion_zeroelim(e: cxtabtt, b: 2.0 * cdx)
+                let temp16b = scale_expansion_zeroelim(e: cxtabtt, b: cdxtail)
+                let temp32b = fast_expansion_sum_zeroelim(temp16a, temp16b)
+                let temp64 = fast_expansion_sum_zeroelim(temp32a, temp32b)
+                finother = fast_expansion_sum_zeroelim(finnow, temp64)
                 finswap = finnow; finnow = finother; finother = finswap
             }
             if cdytail != 0.0 {
-                temp16alen = scaleExpansionZeroElim(elen: cytablen, e: cytab, b: cdytail, h: &temp16a)
-                cytabtlen = scaleExpansionZeroElim(elen: abtlen, e: abt, b: cdytail, h: &cytabt)
-                temp32alen = scaleExpansionZeroElim(elen: cytabtlen, e: cytabt, b: 2.0 * cdy, h: &temp32a)
-                temp48len = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp32alen, f: temp32a, h: &temp48)
-                finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp48len, f: temp48, h: &finother)
+                var temp16a = scale_expansion_zeroelim(e: cytab, b: cdytail)
+                let cytabt = scale_expansion_zeroelim(e: abt, b: cdytail)
+                var temp32a = scale_expansion_zeroelim(e: cytabt, b: 2.0 * cdy)
+                let temp48 = fast_expansion_sum_zeroelim(temp16a, temp32a)
+                finother = fast_expansion_sum_zeroelim(finnow, temp48)
                 finswap = finnow; finnow = finother; finother = finswap
 
-                temp32alen = scaleExpansionZeroElim(elen: cytabtlen, e: cytabt, b: cdytail, h: &temp32a)
-                cytabttlen = scaleExpansionZeroElim(elen: abttlen, e: abtt, b: cdytail, h: &cytabtt)
-                temp16alen = scaleExpansionZeroElim(elen: cytabttlen, e: cytabtt, b: 2.0 * cdy, h: &temp16a)
-                temp16blen = scaleExpansionZeroElim(elen: cytabttlen, e: cytabtt, b: cdytail, h: &temp16b)
-                temp32blen = fastExpansionSumZeroElim(elen: temp16alen, e: temp16a, flen: temp16blen, f: temp16b, h: &temp32b)
-                temp64len = fastExpansionSumZeroElim(elen: temp32alen, e: temp32a, flen: temp32blen, f: temp32b, h: &temp64)
-                finlength = fastExpansionSumZeroElim(elen: finlength, e: finnow, flen: temp64len, f: temp64, h: &finother)
+                temp32a = scale_expansion_zeroelim(e: cytabt, b: cdytail)
+                let cytabtt = scale_expansion_zeroelim(e: abtt, b: cdytail)
+                temp16a = scale_expansion_zeroelim(e: cytabtt, b: 2.0 * cdy)
+                let temp16b = scale_expansion_zeroelim(e: cytabtt, b: cdytail)
+                let temp32b = fast_expansion_sum_zeroelim(temp16a, temp16b)
+                let temp64 = fast_expansion_sum_zeroelim(temp32a, temp32b)
+                finother = fast_expansion_sum_zeroelim(finnow, temp64)
                 finswap = finnow; finnow = finother; finother = finswap
             }
         }
 
-        return finnow[finlength - 1]
+        return finnow.last ?? 0
     }
 
-    public func findCircumcenter(org: Vertex, dest: Vertex, apex: Vertex, xi: inout REAL, eta: inout REAL) -> Vertex {
-
-        // Compute the circumcenter of the triangle.
-        let xdo = dest.x - org.x
-        let ydo = dest.y - org.y
-        let xao = apex.x - org.x
-        let yao = apex.y - org.y
-        let dodist = xdo * xdo + ydo * ydo
-        let aodist = xao * xao + yao * yao
-
-        let denominator: REAL
-        if !exact {
-            denominator = 0.5 / (xdo * yao - xao * ydo)
-        } else {
-            // Use the counterclockwise() routine to ensure a positive (and
-            // reasonably accurate) result, avoiding any possibility of
-            // division by zero.
-            denominator = 0.5 / counterClockwise(a: dest, b: apex, c: org)
-            // Don't count the above as an orientation test.
-        }
-
-        let dx = (yao * dodist - ydo * aodist) * denominator
-        let dy = (xdo * aodist - xao * dodist) * denominator
-
-        // To interpolate vertex attributes for the new vertex inserted at
-        // the circumcenter, define a coordinate system with a xi-axis,
-        // directed from the triangle's origin to its destination, and
-        // an eta-axis, directed from its origin to its apex.
-        // Calculate the xi and eta coordinates of the circumcenter.
-        xi = (yao * dx - xao * dy) * (2.0 * denominator)
-        eta = (xdo * dy - ydo * dx) * (2.0 * denominator)
-
-        return Vertex(id: -1, x: org.x + dx, y: org.y + dy)
-    }
-
-    public func findCircumcenter(org: Vertex, dest: Vertex, apex: Vertex, xi: inout REAL, eta: inout REAL, offconstant: REAL) -> Vertex {
-
-        // Compute the circumcenter of the triangle.
-        let xdo = dest.x - org.x
-        let ydo = dest.y - org.y
-        let xao = apex.x - org.x
-        let yao = apex.y - org.y
-        let dodist = xdo * xdo + ydo * ydo
-        let aodist = xao * xao + yao * yao
-        let dadist = (dest.x - apex.x) * (dest.x - apex.x) +
-            (dest.y - apex.y) * (dest.y - apex.y)
-
-        let denominator: REAL
-        if !exact {
-            denominator = 0.5 / (xdo * yao - xao * ydo)
-        } else {
-            // Use the counterclockwise() routine to ensure a positive (and
-            // reasonably accurate) result, avoiding any possibility of
-            // division by zero.
-            denominator = 0.5 / counterClockwise(a: dest, b: apex, c: org)
-            // Don't count the above as an orientation test.
-        }
-
-        var dx = (yao * dodist - ydo * aodist) * denominator
-        var dy = (xdo * aodist - xao * dodist) * denominator
-
-        // Find the (squared) length of the triangle's shortest edge.  This
-        // serves as a conservative estimate of the insertion radius of the
-        // circumcenter's parent. The estimate is used to ensure that
-        // the algorithm terminates even if very small angles appear in
-        // the input PSLG.
-        if (dodist < aodist) && (dodist < dadist) {
-            if offconstant > 0.0 {
-                // Find the position of the off-center, as described by Alper Ungor.
-                let dxoff = 0.5 * xdo - offconstant * ydo
-                let dyoff = 0.5 * ydo + offconstant * xdo
-                // If the off-center is closer to the origin than the
-                // circumcenter, use the off-center instead.
-                if dxoff * dxoff + dyoff * dyoff < dx * dx + dy * dy {
-                    dx = dxoff
-                    dy = dyoff
-                }
-            }
-        } else if aodist < dadist {
-            if offconstant > 0.0 {
-                let dxoff = 0.5 * xao + offconstant * yao
-                let dyoff = 0.5 * yao - offconstant * xao
-                // If the off-center is closer to the origin than the
-                // circumcenter, use the off-center instead.
-                if dxoff * dxoff + dyoff * dyoff < dx * dx + dy * dy {
-                    dx = dxoff
-                    dy = dyoff
-                }
-            }
-        } else {
-            if offconstant > 0.0 {
-                let dxoff = 0.5 * (apex.x - dest.x) - offconstant * (apex.y - dest.y)
-                let dyoff = 0.5 * (apex.y - dest.y) + offconstant * (apex.x - dest.x)
-                // If the off-center is closer to the destination than the
-                // circumcenter, use the off-center instead.
-                if dxoff * dxoff + dyoff * dyoff <
-                    (dx - xdo) * (dx - xdo) + (dy - ydo) * (dy - ydo) {
-                    dx = xdo + dxoff
-                    dy = ydo + dyoff
-                }
-            }
-        }
-
-        // To interpolate vertex attributes for the new vertex inserted at
-        // the circumcenter, define a coordinate system with a xi-axis,
-        // directed from the triangle's origin to its destination, and
-        // an eta-axis, directed from its origin to its apex.
-        // Calculate the xi and eta coordinates of the circumcenter.
-        xi = (yao * dx - xao * dy) * (2.0 * denominator)
-        eta = (xdo * dy - ydo * dx) * (2.0 * denominator)
-
-        return Vertex(id: -2, x: org.x + dx, y: org.y + dy)
-    }
-
-    private func counterClockwiseAdapt(pa: Vertex, pb: Vertex, pc: Vertex, detsum: REAL) -> REAL {
-
-        // Edited to work around index out of range exceptions (changed array length from 4 to 5).
-        // See unsafe indexing in FastExpansionSumZeroElim.
-        var B = [REAL](repeating: 0, count: 5), u = [REAL](repeating: 0, count: 5)
-        var C1 = [REAL](repeating: 0, count: 5), C2 = [REAL](repeating: 0, count: 12), D = [REAL](repeating: 0, count: 16)
-        var acxtail: REAL = 0, acytail: REAL = 0, bcxtail: REAL = 0, bcytail: REAL = 0
-        var detlefttail: REAL = 0, detrighttail: REAL = 0
-        var det: REAL = 0, errbound: REAL = 0
-
-        let acx = (pa.x - pc.x)
-        let bcx = (pb.x - pc.x)
-        let acy = (pa.y - pc.y)
-        let bcy = (pb.y - pc.y)
-        var B3: REAL = 0
-        var c1length = 0, c2length = 0, dlength = 0
-
-        var u3: REAL = 0
-        var s1 = REAL(0), t1 = REAL(0)
-        var s0 = REAL(0), t0 = REAL(0)
-
-        var bvirt = REAL(0)
-        var avirt = REAL(0), bround = REAL(0), around = REAL(0)
-        var c = REAL(0)
-        var abig = REAL(0)
-        var ahi = REAL(0), alo = REAL(0), bhi = REAL(0), blo = REAL(0)
-        var err1 = REAL(0), err2 = REAL(0), err3 = REAL(0)
-        var _i = REAL(0), _j = REAL(0)
-        var _0 = REAL(0)
-
-        let detleft = (acx * bcy); c = (splitter * acx); abig = (c - acx); ahi = c - abig; alo = acx - ahi; c = (splitter * bcy); abig = (c - bcy); bhi = c - abig; blo = bcy - bhi; err1 = detleft - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); detlefttail = (alo * blo) - err3
-        let detright = (acy * bcx); c = (splitter * acy); abig = (c - acy); ahi = c - abig; alo = acy - ahi; c = (splitter * bcx); abig = (c - bcx); bhi = c - abig; blo = bcx - bhi; err1 = detright - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); detrighttail = (alo * blo) - err3
-
-        _i = (detlefttail - detrighttail); bvirt = (detlefttail - _i); avirt = _i + bvirt; bround = bvirt - detrighttail; around = detlefttail - avirt; B[0] = around + bround; _j = (detleft + _i); bvirt = (_j - detleft); avirt = _j - bvirt; bround = _i - bvirt; around = detleft - avirt; _0 = around + bround; _i = (_0 - detright); bvirt = (_0 - _i); avirt = _i + bvirt; bround = bvirt - detright; around = _0 - avirt; B[1] = around + bround; B3 = (_j + _i); bvirt = (B3 - _j); avirt = B3 - bvirt; bround = _i - bvirt; around = _j - avirt; B[2] = around + bround
-
-        B[3] = B3
-
-        det = estimate(elen: 4, e: B)
-        errbound = ccwerrboundB * detsum
-        if (det >= errbound) || (-det >= errbound) {
-            return det
-        }
-
-        bvirt = (pa.x - acx); avirt = acx + bvirt; bround = bvirt - pc.x; around = pa.x - avirt; acxtail = around + bround
-        bvirt = (pb.x - bcx); avirt = bcx + bvirt; bround = bvirt - pc.x; around = pb.x - avirt; bcxtail = around + bround
-        bvirt = (pa.y - acy); avirt = acy + bvirt; bround = bvirt - pc.y; around = pa.y - avirt; acytail = around + bround
-        bvirt = (pb.y - bcy); avirt = bcy + bvirt; bround = bvirt - pc.y; around = pb.y - avirt; bcytail = around + bround
-
-        if (acxtail == 0.0) && (acytail == 0.0)
-            && (bcxtail == 0.0) && (bcytail == 0.0) {
-            return det
-        }
-
-        errbound = ccwerrboundC * detsum + resulterrbound * ((det) >= 0.0 ? (det) : -(det))
-        det += (acx * bcytail + bcy * acxtail)
-            - (acy * bcxtail + bcx * acytail)
-        if (det >= errbound) || (-det >= errbound) {
-            return det
-        }
-
-        s1 = (acxtail * bcy); c = (splitter * acxtail); abig = (c - acxtail); ahi = c - abig; alo = acxtail - ahi; c = (splitter * bcy); abig = (c - bcy); bhi = c - abig; blo = bcy - bhi; err1 = s1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); s0 = (alo * blo) - err3
-        t1 = (acytail * bcx); c = (splitter * acytail); abig = (c - acytail); ahi = c - abig; alo = acytail - ahi; c = (splitter * bcx); abig = (c - bcx); bhi = c - abig; blo = bcx - bhi; err1 = t1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); t0 = (alo * blo) - err3
-        _i = (s0 - t0); bvirt = (s0 - _i); avirt = _i + bvirt; bround = bvirt - t0; around = s0 - avirt; u[0] = around + bround; _j = (s1 + _i); bvirt = (_j - s1); avirt = _j - bvirt; bround = _i - bvirt; around = s1 - avirt; _0 = around + bround; _i = (_0 - t1); bvirt = (_0 - _i); avirt = _i + bvirt; bround = bvirt - t1; around = _0 - avirt; u[1] = around + bround; u3 = (_j + _i); bvirt = (u3 - _j); avirt = u3 - bvirt; bround = _i - bvirt; around = _j - avirt; u[2] = around + bround
-        u[3] = u3
-        c1length = fastExpansionSumZeroElim(elen: 4, e: B, flen: 4, f: u, h: &C1)
-
-        s1 = (acx * bcytail); c = (splitter * acx); abig = (c - acx); ahi = c - abig; alo = acx - ahi; c = (splitter * bcytail); abig = (c - bcytail); bhi = c - abig; blo = bcytail - bhi; err1 = s1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); s0 = (alo * blo) - err3
-        t1 = (acy * bcxtail); c = (splitter * acy); abig = (c - acy); ahi = c - abig; alo = acy - ahi; c = (splitter * bcxtail); abig = (c - bcxtail); bhi = c - abig; blo = bcxtail - bhi; err1 = t1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); t0 = (alo * blo) - err3
-        _i = (s0 - t0); bvirt = (s0 - _i); avirt = _i + bvirt; bround = bvirt - t0; around = s0 - avirt; u[0] = around + bround; _j = (s1 + _i); bvirt = (_j - s1); avirt = _j - bvirt; bround = _i - bvirt; around = s1 - avirt; _0 = around + bround; _i = (_0 - t1); bvirt = (_0 - _i); avirt = _i + bvirt; bround = bvirt - t1; around = _0 - avirt; u[1] = around + bround; u3 = (_j + _i); bvirt = (u3 - _j); avirt = u3 - bvirt; bround = _i - bvirt; around = _j - avirt; u[2] = around + bround
-        u[3] = u3
-        c2length = fastExpansionSumZeroElim(elen: c1length, e: C1, flen: 4, f: u, h: &C2)
-
-        s1 = (acxtail * bcytail); c = (splitter * acxtail); abig = (c - acxtail); ahi = c - abig; alo = acxtail - ahi; c = (splitter * bcytail); abig = (c - bcytail); bhi = c - abig; blo = bcytail - bhi; err1 = s1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); s0 = (alo * blo) - err3
-        t1 = (acytail * bcxtail); c = (splitter * acytail); abig = (c - acytail); ahi = c - abig; alo = acytail - ahi; c = (splitter * bcxtail); abig = (c - bcxtail); bhi = c - abig; blo = bcxtail - bhi; err1 = t1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); t0 = (alo * blo) - err3
-        _i = (s0 - t0); bvirt = (s0 - _i); avirt = _i + bvirt; bround = bvirt - t0; around = s0 - avirt; u[0] = around + bround; _j = (s1 + _i); bvirt = (_j - s1); avirt = _j - bvirt; bround = _i - bvirt; around = s1 - avirt; _0 = around + bround; _i = (_0 - t1); bvirt = (_0 - _i); avirt = _i + bvirt; bround = bvirt - t1; around = _0 - avirt; u[1] = around + bround; u3 = (_j + _i); bvirt = (u3 - _j); avirt = u3 - bvirt; bround = _i - bvirt; around = _j - avirt; u[2] = around + bround
-        u[3] = u3
-        dlength = fastExpansionSumZeroElim(elen: c2length, e: C2, flen: 4, f: u, h: &D)
-
-        return (D[dlength - 1])
-    }
-
-    private func scaleExpansionZeroElim(elen: Int, e: [REAL], b: REAL, h: inout [REAL]) -> Int {
-        var Q: REAL = 0, sum: REAL = 0
+    public static func scale_expansion_zeroelim(e: [REAL], b: REAL) -> [REAL] {
+        var bhi: REAL = 0, blo: REAL = 0
         var hh: REAL = 0
-        var product1: REAL = 0
-        var product0: REAL = 0
-        var hindex = 0
-        var enow: REAL = 0
-        var bvirt: REAL = 0
-        var avirt: REAL = 0, bround: REAL = 0, around: REAL = 0
-        var c: REAL = 0
-        var abig: REAL = 0
-        var ahi: REAL = 0, alo: REAL = 0, bhi: REAL = 0, blo: REAL = 0
-        var err1: REAL = 0, err2: REAL = 0, err3: REAL = 0
+        var h = [REAL]()
+        var Q: REAL = 0
 
-        c = (splitter * b); abig = (c - b); bhi = c - abig; blo = b - bhi
-        Q = (e[0] * b); c = (splitter * e[0]); abig = (c - e[0]); ahi = c - abig; alo = e[0] - ahi; err1 = Q - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); hh = (alo * blo) - err3
-        hindex = 0
+        Split(b, &bhi, &blo)
+        Two_Product_Presplit(e[0], b, bhi, blo, &Q, &hh)
         if hh != 0 {
-            h[hindex] = hh
-            hindex += 1
+            h.append(hh)
         }
-        for eindex in 1..<elen {
-            enow = e[eindex]
-            product1 = (enow * b); c = (splitter * enow); abig = (c - enow); ahi = c - abig; alo = enow - ahi; err1 = product1 - (ahi * bhi); err2 = err1 - (alo * bhi); err3 = err2 - (ahi * blo); product0 = (alo * blo) - err3
-            sum = (Q + product0); bvirt = (sum - Q); avirt = sum - bvirt; bround = product0 - bvirt; around = Q - avirt; hh = around + bround
+        for eindex in 1..<e.count {
+            let enow = e[eindex]
+            var product1: REAL = 0, sum: REAL = 0, product0: REAL = 0
+            Two_Product_Presplit(enow, b, bhi, blo, &product1, &product0)
+            Two_Sum(Q, product0, &sum, &hh)
             if hh != 0 {
-                h[hindex] = hh
-                hindex += 1
+                h.append(hh)
             }
-            Q = (product1 + sum); bvirt = Q - product1; hh = sum - bvirt
+            Fast_Two_Sum(product1, sum, &Q, &hh)
             if hh != 0 {
-                h[hindex] = hh
-                hindex += 1
+                h.append(hh)
             }
         }
-        if (Q != 0.0) || (hindex == 0) {
-            h[hindex] = Q
-            hindex += 1
+        if (Q != 0.0) || h.isEmpty {
+            h.append(Q)
         }
-        return hindex
+        return h
     }
 
-    private func estimate( elen: Int, e: [REAL]) -> REAL {
-        return e[0..<elen].reduce(0, +)
-    }
-
-    private func fastExpansionSumZeroElim(elen: Int, e: [REAL], flen: Int, f: [REAL], h: inout [REAL]) -> Int {
-
+    public static func fast_expansion_sum_zeroelim(e: [REAL], f: [REAL]) -> [REAL] {
         var enow = e[0]
         var fnow = f[0]
-        var eindex = 0
-        var findex = 0
+        var eindex = 0, findex = 0
         var Q: REAL
+
+        var h = [REAL]()
+        var hh: REAL = 0
+
         if (fnow > enow) == (fnow > -enow) {
             Q = enow
             eindex += 1
@@ -869,88 +801,62 @@ class Predicates {
             findex += 1
             fnow = f[findex]
         }
-        var hindex = 0
-        var Qnew = Q
-        var hh: REAL = 0
-        var bvirt: REAL = 0
-        var avirt: REAL = 0, bround: REAL = 0, around: REAL = 0
 
-        if (eindex < elen) && (findex < flen) {
+        if (eindex < e.count) && (findex < f.count) {
+            var Qnew: REAL = 0
             if (fnow > enow) == (fnow > -enow) {
-                Qnew = (enow + Q); bvirt = Qnew - enow; hh = Q - bvirt
+                Fast_Two_Sum(enow, Q, &Qnew, &hh)
                 eindex += 1
                 enow = e[eindex]
             } else {
-                Qnew = (fnow + Q); bvirt = Qnew - fnow; hh = Q - bvirt
+                Fast_Two_Sum(fnow, Q, &Qnew, &hh)
                 findex += 1
                 fnow = f[findex]
             }
             Q = Qnew
             if hh != 0.0 {
-                h[hindex] = hh
-                hindex += 1
+                h.append(hh)
             }
-            while (eindex < elen) && (findex < flen) {
+            while (eindex < e.count) && (findex < f.count) {
                 if (fnow > enow) == (fnow > -enow) {
-                    Qnew = (Q + enow)
-                    bvirt = (Qnew - Q)
-                    avirt = Qnew - bvirt
-                    bround = enow - bvirt
-                    around = Q - avirt
-                    hh = around + bround
+                    Two_Sum(Q, enow, &Qnew, &hh)
                     eindex += 1
                     enow = e[eindex]
                 } else {
-                    Qnew = (Q + fnow)
-                    bvirt = (Qnew - Q)
-                    avirt = Qnew - bvirt
-                    bround = fnow - bvirt
-                    around = Q - avirt
-                    hh = around + bround
+                    Two_Sum(Q, fnow, &Qnew, &hh)
                     findex += 1
                     fnow = f[findex]
                 }
                 Q = Qnew
                 if hh != 0.0 {
-                    h[hindex] = hh
-                    hindex += 1
+                    h.append(hh)
                 }
             }
         }
-        while eindex < elen {
-            Qnew = (Q + enow)
-            bvirt = (Qnew - Q)
-            avirt = Qnew - bvirt
-            bround = enow - bvirt
-            around = Q - avirt
-            hh = around + bround
+        while eindex < e.count {
+            var Qnew: REAL = 0
+            Two_Sum(Q, enow, &Qnew, &hh)
             eindex += 1
             enow = e[eindex]
             Q = Qnew
             if hh != 0.0 {
-                h[hindex] = hh
-                hindex += 1
+                h.append(hh)
             }
         }
-        while findex < flen {
-            Qnew = (Q + fnow)
-            bvirt = (Qnew - Q)
-            avirt = Qnew - bvirt
-            bround = fnow - bvirt
-            around = Q - avirt
-            hh = around + bround
+        while findex < f.count {
+            var Qnew: REAL = 0
+            Two_Sum(Q, fnow, &Qnew, &hh)
             findex += 1
             fnow = f[findex]
             Q = Qnew
             if hh != 0.0 {
-                h[hindex] = hh
-                hindex += 1
+                h.append(hh)
             }
         }
-        if (Q != 0.0) || (hindex == 0) {
-            h[hindex] = Q
-            hindex += 1
+        if (Q != 0.0) || (h.isEmpty) {
+            h.append(Q)
         }
-        return hindex
+        return h
     }
+
 }
