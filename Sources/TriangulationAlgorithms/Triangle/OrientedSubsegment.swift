@@ -8,7 +8,7 @@
 
 import Foundation
 
-struct OrientedSubsegment {
+class OrientedSubsegment {
 
     init(subseg: Subsegment, orient: Int) {
         self.subsegment = subseg
@@ -23,22 +23,22 @@ struct OrientedSubsegment {
         set { subsegment.marker = newValue }
     }
 
-    var encodedSubsegment: EncodedSubsegment {
-        return EncodedSubsegment(ss: subsegment, orientation: orient)
+    var encodedSubsegment: Triangle.EncodedSubsegment {
+        return Triangle.EncodedSubsegment(ss: subsegment, orientation: orient)
     }
 
-    mutating func ssymself() {
+    func ssymself() {
         orient = 1 - orient
     }
 
-    mutating func snextself() {
+    func snextself() {
         let sptr = orient == 0 ? subsegment.adj2 : subsegment.adj1
         subsegment = sptr!.ss
         orient = sptr!.orientation
     }
 
     func spivot() -> OrientedSubsegment {
-        let sptr: EncodedSubsegment
+        let sptr: Triangle.EncodedSubsegment
         switch orient {
         case 0:
             sptr = subsegment.adj1!
@@ -50,7 +50,7 @@ struct OrientedSubsegment {
 
     func stpivot() -> OrientedTriangle {
         let ptr = orient == 0 ? subsegment.t1 : subsegment.t2
-        return ptr!
+        return OrientedTriangle(encoded: ptr!)
     }
 
     func ssym() -> OrientedSubsegment {
@@ -59,13 +59,13 @@ struct OrientedSubsegment {
 
     func sdissolve(m: Mesh) {
         if orient == 0 {
-            subsegment.adj1 = EncodedSubsegment(ss: m.dummysub, orientation: 0)
+            subsegment.adj1 = Triangle.EncodedSubsegment(ss: m.dummysub, orientation: 0)
         } else {
-            subsegment.adj2 = EncodedSubsegment(ss: m.dummysub, orientation: 0)
+            subsegment.adj2 = Triangle.EncodedSubsegment(ss: m.dummysub, orientation: 0)
         }
     }
 
-    func sbond(to osub2: inout OrientedSubsegment) {
+    func sbond(to osub2: OrientedSubsegment) {
         if orient == 0 {
             subsegment.adj1 = osub2.encodedSubsegment
         } else {
@@ -83,15 +83,15 @@ struct OrientedSubsegment {
 
     func stdissolve(m: Mesh) {
         if orient == 0 {
-            subsegment.t1 = OrientedTriangle(triangle: m.dummytri, orientation: 0)
+            subsegment.t1 = Triangle.EncodedTriangle(triangle: m.dummytri, orientation: 0)
         } else {
-            subsegment.t2 = OrientedTriangle(triangle: m.dummytri, orientation: 0)
+            subsegment.t2 = Triangle.EncodedTriangle(triangle: m.dummytri, orientation: 0)
         }
     }
 
     /* These primitives determine or set the origin or destination of a          */
     /*   subsegment or the segment that includes it.                             */
-    var sorg: Int {
+    var sorg: Vertex? {
         get {
             if orient == 0 {
                 return subsegment.v1
@@ -109,7 +109,7 @@ struct OrientedSubsegment {
 
     }
 
-    var sdest: Int {
+    var sdest: Vertex? {
         get {
             if orient == 0 {
                 return subsegment.v2
@@ -126,7 +126,7 @@ struct OrientedSubsegment {
         }
     }
 
-    var segorg: Int {
+    var segorg: Vertex? {
         get {
             if orient == 0 {
                 return subsegment.v3
@@ -143,7 +143,7 @@ struct OrientedSubsegment {
         }
     }
 
-    var segdest: Int {
+    var segdest: Vertex? {
         get {
             if orient == 0 {
                 return subsegment.v4
@@ -159,4 +159,5 @@ struct OrientedSubsegment {
             }
         }
     }
+
 }

@@ -8,7 +8,7 @@
 
 import Foundation
 
-struct Vertex: Equatable {
+class Vertex: Vector2 {
     enum State {
         case input
         case segment
@@ -17,32 +17,31 @@ struct Vertex: Equatable {
         case undead
     }
 
-    let id: Int
-
-    let x: REAL, y: REAL
+    let x: REAL, y: REAL, z: REAL
 
     var mark = 0
 
-    var state = Vertex.State.input
+    var state: Vertex.State = .input
 
-    struct TriIndex {
-        let id: Int
-        let orientation: Int
-    }
+    var triangle: Triangle.EncodedTriangle?
+    let id: Int
 
-    var triangle: TriIndex?
-
-    init(id: Int, x: REAL, y: REAL) {
+    init(id: Int, x: REAL, y: REAL, z: REAL) {
         self.id = id
         self.x = x
         self.y = y
+        self.z = z
     }
 
-    var vert: Vector2 {
-        CGPoint(x: x, y: y)
-    }
+    func realAt(axis: Int) -> REAL {
+        switch axis {
+        case 0:
+            return x
+        case 1:
+            return y
+        default:
+            return z
 
-    static func == (lhs: Vertex, rhs: Vertex) -> Bool {
-        return lhs.id == rhs.id
+        }
     }
 }

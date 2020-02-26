@@ -8,13 +8,13 @@
 
 import Foundation
 
-struct BadSubsegment {
-    init(seg: EncodedSubsegment, org: Int, dest: Int) {
+class BadSubsegment {
+    init(seg: Triangle.EncodedSubsegment, org: Vertex, dest: Vertex) {
         enclosedSubsegment = seg
         subsegOrg = org
         subsegDest = dest
     }
 
-    var enclosedSubsegment: EncodedSubsegment
-    var subsegOrg: Int, subsegDest: Int
+    var enclosedSubsegment: Triangle.EncodedSubsegment
+    var subsegOrg: Vertex, subsegDest: Vertex
 }

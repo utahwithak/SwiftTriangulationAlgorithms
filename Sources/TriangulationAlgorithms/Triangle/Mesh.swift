@@ -18,8 +18,6 @@ class Mesh {
 
     /* Variable that maintains the stack of recently flipped triangles.          */
 
-//    var lastflip: FlipStacker?
-
     /* Other variables. */
 
     var xmin: REAL = 0, xmax: REAL = 0, ymin: REAL = 0, ymax: REAL = 0;                            /* x and y bounds. */
@@ -56,13 +54,13 @@ class Mesh {
 
     /* Pointer to the `triangle' that occupies all of "outer space."             */
 
-    let dummytri = Triangle(id: -1010)
+    var dummytri = Triangle()
 
     /* Pointer to the omnipresent subsegment.  Referenced by any triangle or     */
     /*   subsegment that isn't really connected to a subsegment at that          */
     /*   location.                                                               */
 
-    let dummysub = Subsegment()
+    var dummysub = Subsegment()
 
     /* Pointer to a recently visited triangle.  Improves point location if       */
     /*   proximate vertices are inserted sequentially.                           */
@@ -70,25 +68,23 @@ class Mesh {
     var recenttri: OrientedTriangle?
 
     func makeTriangle(b: Behavior) -> OrientedTriangle {
-        let tri = Triangle(id: triangles.count, adjoining: dummytri, subsegment: b.usesegments ? dummysub : nil)
-//        for _ in 0..<eextras {
-//            tri.attributes.append(0)
-//        }
-//
-//        if b.vararea {
-//            tri.area = -1
-//        }
+        let tri = Triangle(adjoining: dummytri, subsegment: b.usesegments ? dummysub : nil)
+        for _ in 0..<eextras {
+            tri.attributes.append(0)
+        }
+
+        if b.vararea {
+            tri.area = -1
+        }
         triangles.append(tri)
-        return OrientedTriangle(triangle: tri, orientation: 0)
+        return OrientedTriangle(triangle: tri, orient: 0)
     }
 
     func killTriangle(triangle: Triangle) {
         triangle.killTriangle()
-//        triangles.removeAll(where: { $0 === triangle })
+        triangles.removeAll(where: { $0 === triangle })
     }
-    func removeAllDeadTriangles() {
-//        triangles.removeAll { $0.isDead }
-    }
+
     func killSubseg(subseg: Subsegment) {
         subseg.kill()
         subsegs.removeAll(where: { $0 === subseg })
@@ -99,24 +95,24 @@ class Mesh {
         let newsubseg = Subsegment()
         /* Initialize the two adjoining subsegments to be the omnipresent */
         /*   subsegment.                                                  */
-        newsubseg.adj1 = EncodedSubsegment(ss: dummysub, orientation: 0)
-        newsubseg.adj2 = EncodedSubsegment(ss: dummysub, orientation: 0)
+        newsubseg.adj1 = Triangle.EncodedSubsegment(ss: dummysub, orientation: 0)
+        newsubseg.adj2 = Triangle.EncodedSubsegment(ss: dummysub, orientation: 0)
         /* Initialize the two adjoining triangles to be "outer space." */
-        newsubseg.t1 = OrientedTriangle(triangle: dummytri, orientation: 0)
-        newsubseg.t2 = OrientedTriangle(triangle: dummytri, orientation: 0)
+        newsubseg.t1 = Triangle.EncodedTriangle(triangle: dummytri, orientation: 0)
+        newsubseg.t2 = Triangle.EncodedTriangle(triangle: dummytri, orientation: 0)
         /* Set the boundary marker to zero. */
         newsubseg.marker = 0
         subsegs.append(newsubseg)
         return OrientedSubsegment(subseg: newsubseg, orient: 0)
     }
 
-    func createVertex(x: REAL, y: REAL) -> Vertex {
-        let newVertex = Vertex(id: vertices.count, x: x, y: y)
+    func createVertex(x: REAL, y: REAL, z: REAL = 0) -> Vertex {
+        let newVertex = Vertex(id: vertices.count, x: x, y: y, z: z)
         vertices.append(newVertex)
         return newVertex
     }
 
-    func createbadSubSeg(seg: EncodedSubsegment, org: Int, dest: Int) -> BadSubsegment {
+    func createbadSubSeg(seg: Triangle.EncodedSubsegment, org: Vertex, dest: Vertex) -> BadSubsegment {
         let newsubseg = BadSubsegment(seg: seg, org: org, dest: dest)
         badSubsegs.append(newsubseg)
         return newsubseg

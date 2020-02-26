@@ -9,18 +9,19 @@
 import Foundation
 
 class Subsegment {
-    var adj1: EncodedSubsegment?, adj2: EncodedSubsegment?
-    var v1 = -1, v2 = -1, v3 = -1, v4 = -1
-    var t1: OrientedTriangle?, t2: OrientedTriangle?
+    var adj1: Triangle.EncodedSubsegment?, adj2: Triangle.EncodedSubsegment?
+    var v1: Vertex?, v2: Vertex?, v3: Vertex?, v4: Vertex?
+    var t1: Triangle.EncodedTriangle?, t2: Triangle.EncodedTriangle?
     var marker: Int = 0
+    var segnum: Int = 0
 
     func kill() {
         adj1 = nil
         adj2 = nil
-        v1 = -1
-        v2 = -1
-        v3 = -1
-        v4 = -1
+        v1 = nil
+        v2 = nil
+        v3 = nil
+        v4 = nil
         t1 = nil
         t2 = nil
     }

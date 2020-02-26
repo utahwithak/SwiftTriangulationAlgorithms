@@ -8,58 +8,52 @@
 
 import Foundation
 
-public typealias REAL = CGFloat
+typealias REAL = CGFloat
+
 let plus1mod3 = [1, 2, 0]
 let minus1mod3 = [2, 0, 1]
 
 public class Triangulator {
 
-    let m = Mesh()
-
-    let b: Behavior
-
-    let inArgs: TriangulateIO
-
-    var generator = Xoshiro()
-
-    private var predicates: Predicates
-
-    public init(b: Behavior, inArgs: TriangulateIO) {
-        self.b = b
-        self.inArgs = inArgs
-        self.predicates = Predicates(exact: !b.noexact)
+    private static let SAMPLEFACTOR = 11
+    static var generator = Xoshiro(seed: (0, 142, 4325, 524214))
+    private static func randomnation( choices: Int) -> Int {
+        return Int.random(in: 0..<choices, using: &generator)
     }
 
-    public func triangulate() -> TriangulateIO {
+    public static func triangulate(b: Behavior, inArgs: TriangulateIO) -> TriangulateIO {
+        let mesh = Mesh()
 
         var out = inArgs
 
-        m.steinerleft = b.steiner
+        Predicates.exactinit()
 
-        transferNodes(pointlist: inArgs.pointlist, attributes: inArgs.pointattributelist, markerList: inArgs.pointmarkerlist, numberofpointattribs: inArgs.numberOfPointAttributes)
+        mesh.steinerleft = b.steiner
+
+        transferNodes(mesh: mesh, behavior: b, pointlist: inArgs.pointlist, attributes: [], markerList: inArgs.pointmarkerlist, numberofpointattribs: inArgs.numberOfPointAttributes)
 
         if b.refine {
             print("TODO")
         } else {
-            m.hullsize = delaunay()
+            mesh.hullsize = delaunay(m: mesh, b: b)
         }
 
         /* Ensure that no vertex can be mistaken for a triangular bounding */
         /*   box vertex in insertvertex().                                 */
-        m.infvertex1 = nil
-        m.infvertex2 = nil
-        m.infvertex3 = nil
+        mesh.infvertex1 = nil
+        mesh.infvertex2 = nil
+        mesh.infvertex3 = nil
 
         if b.usesegments {
-            m.checksegments = true                /* Segments will be introduced next. */
+            mesh.checksegments = true                /* Segments will be introduced next. */
             if !b.refine {
                 /* Insert PSLG segments and/or convex hull segments. */
-                formskeleton(segmentlist: inArgs.segmentlist, segmentmarkerlist: inArgs.segmentmarkerlist)
+                formskeleton(m: mesh, b: b, segmentlist: inArgs.segmentlist, segmentmarkerlist: inArgs.segmentmarkerlist)
 
             }
         }
 
-        if b.poly && (m.triangles.count > 0) {
+        if b.poly && (mesh.triangles.count > 0) {
 
             //            holearray = in->holelist;
             //            m.holes = in->numberofholes;
@@ -68,14 +62,14 @@ public class Triangulator {
 
             if !b.refine {
                 /* Carve out holes and concavities. */
-                carveholes(holelist: inArgs.holelist, regionlist: inArgs.regionlist)
+                carveholes(m: mesh, b: b, holelist: inArgs.holelist, regionlist: inArgs.regionlist)
             }
         } else {
             /* Without a PSLG, there can be no holes or regional attributes   */
             /*   or area constraints.  The following are set to zero to avoid */
             /*   an accidental free() later.                                  */
-            m.holes = 0
-            m.regions = 0
+            mesh.holes = 0
+            mesh.regions = 0
         }
         //
         //
@@ -105,8 +99,8 @@ public class Triangulator {
 
         /* writenodes() numbers the vertices too. */
 
-        writenodes(pointlist: &out.pointlist, pointmarkerlist: &out.pointmarkerlist)
-        writeelements(trianglelist: &out.trianglelist)
+        writenodes(m: mesh, b: b, pointlist: &out.pointlist, pointmarkerlist: &out.pointmarkerlist)
+        writeelements(m: mesh, b: b, trianglelist: &out.trianglelist)
         //
         //                /* The -c switch (convex switch) causes a PSLG to be written */
         //                /*   even if none was read.                                  */
@@ -167,7 +161,7 @@ public class Triangulator {
     /*  after the vertices are written to a file.                                */
     /*                                                                           */
     /*****************************************************************************/
-    private func writenodes(pointlist: inout [Vector2], pointmarkerlist: inout [Int]) {
+    private static func writenodes(m: Mesh, b: Behavior, pointlist: inout [Vector2], pointmarkerlist: inout [Int]) {
 
         if !b.quiet {
             print("Writing vertices.")
@@ -181,16 +175,15 @@ public class Triangulator {
 
         var vertexnumber = 0
 
-        for i in 0..<m.vertices.count where m.vertices[i].state != .undead {
+        for vertexloop in m.vertices where vertexloop.state != .undead {
 
             /* X and y coordinates. */
-            pointlist.append(m.vertices[i].vert)
+            pointlist.append(CGPoint(x: vertexloop.x, y: vertexloop.y))
 
-            pointmarkerlist.append(m.vertices[i].mark)
+            pointmarkerlist.append(vertexloop.mark)
 
-            m.vertices[i].mark = vertexnumber
+            vertexloop.mark = vertexnumber
             vertexnumber += 1
-
         }
 
     }
@@ -200,22 +193,26 @@ public class Triangulator {
     /*  writeelements()   Write the triangles to an .ele file.                   */
     /*                                                                           */
     /*****************************************************************************/
-    private func writeelements(trianglelist: inout [Int]) {
+    private static func writeelements(m: Mesh, b: Behavior, trianglelist: inout [Int]) {
         if !b.quiet {
             print("Writing triangles.")
         }
         /* Allocate memory for output triangles if necessary. */
         trianglelist.removeAll(keepingCapacity: true)
 
-        for triangle in m.triangles where !triangle.isDead {
-            let triangleloop = OrientedTriangle(triangle: triangle, orientation: 0)
-            trianglelist.append(m.vertices[triangleloop.org].mark)
-            trianglelist.append(m.vertices[triangleloop.dest].mark)
-            trianglelist.append(m.vertices[triangleloop.apex].mark)
+        for triangle in m.triangles {
+            let triangleloop = OrientedTriangle(triangle: triangle, orient: 0)
+
+            let p1 = triangleloop.org!
+            let p2 = triangleloop.dest!
+            let p3 = triangleloop.apex!
+            trianglelist.append(p1.mark)
+            trianglelist.append(p2.mark)
+            trianglelist.append(p3.mark)
         }
     }
 
-    private func transferNodes(pointlist: [Vector2], attributes: [REAL], markerList: [Int], numberofpointattribs: Int) {
+    private static func transferNodes(mesh m: Mesh, behavior b: Behavior, pointlist: [Vector2], attributes: [REAL], markerList: [Int], numberofpointattribs: Int) {
 
         m.invertices = pointlist.count
         m.mesh_dim = 2
@@ -228,24 +225,32 @@ public class Triangulator {
             print("  Sorting vertices.")
         }
 
+        var generator = Xoshiro(seed: (0, 142, 4325, 524214))
         //        if m.nextras == 0 {
         //            b.weighted = false
         //        }
-        m.vertices = pointlist.sorted(by: {  lhs, rhs in
-            if lhs.x < rhs.x {
+        struct SortVec: Vector2 {
+            var x: CGFloat { vec.x }
+            var y: CGFloat { vec.y }
+            let id: Int
+            let vec: Vector2
+        }
+
+        m.vertices = pointlist.enumerated().map({SortVec(id: $0.offset, vec: $0.element) }).sorted(by: {  lhs, rhs in
+            if lhs.vec.x < rhs.vec.x {
                 return true
-            } else if lhs.x > rhs.x {
+            } else if lhs.vec.x > rhs.vec.x {
                 return false
             } else {
-                return lhs.y < rhs.y
+                return lhs.vec.y < rhs.vec.y
             }
 
-        }).alteratedAxes(generator: &generator, dwyer: b.dwyer).enumerated().map({ i, vert in
+        }).alteratedAxes(generator: &generator, dwyer: b.dwyer).enumerated().map({ i, sortVec in
 
-            var vert = Vertex(id: i, x: vert.x, y: vert.y)
+            let vert = Vertex(id: sortVec.id, x: sortVec.x, y: sortVec.y, z: 0)
 
             if !markerList.isEmpty {
-                vert.mark = markerList[i]
+                vert.mark = markerList[vert.id]
             } else {
                 vert.mark = 0
             }
@@ -263,9 +268,43 @@ public class Triangulator {
             }
             return vert
         })
+//        for i in 0..<m.invertices {
+//             let x = pointlist[i].x
+//             let y = pointlist[i].y
+//             let z: REAL
+//             if numberofpointattribs == 1 {
+//                 z = attributes[i]
+//             } else {
+//                 z = 0
+//             }
+//             if numberofpointattribs > 1 {
+//                 print("THIS NEEDS TO BE FIXED!!!!!!")
+//             }
+//
+//             let vert = Vertex(x: x, y: y, z: z)
+//             m.vertices.append(vert)
+//             if !markerList.isEmpty {
+//                 vert.mark = markerList[i]
+//             } else {
+//                 vert.mark = 0
+//             }
+//             vert.state = .input
+//
+//             if i == 0 {
+//                 m.xmax = x
+//                 m.xmin = x
+//                 m.ymin = y
+//                 m.ymax = y
+//             } else {
+//                 m.xmin = min(m.xmin, x)
+//                 m.xmax = max(m.xmax, x)
+//                 m.ymin = min(m.ymin, y)
+//                 m.ymax = max(m.ymax, y)
+//             }
+//         }
     }
 
-    private func delaunay() -> Int {
+    private static func delaunay(m: Mesh, b: Behavior) -> Int {
         var hulledges = 0
 
         m.eextras = 0
@@ -284,64 +323,111 @@ public class Triangulator {
         }
     }
 
-    private func initalizeDummies(mesh m: Mesh, b: Behavior) {
-        let encoded = OrientedTriangle(triangle: m.dummytri, orientation: 0)
+    private static func initalizeDummies(mesh m: Mesh, b: Behavior) {
+        let encoded = Triangle.EncodedTriangle(triangle: m.dummytri, orientation: 0)
         m.dummytri.t1 = encoded
         m.dummytri.t2 = encoded
         m.dummytri.t3 = encoded
 
         if b.usesegments {
-            m.dummysub.adj1 = EncodedSubsegment(ss: m.dummysub, orientation: 0)
-            m.dummysub.adj2 = EncodedSubsegment(ss: m.dummysub, orientation: 0)
+            m.dummysub.adj1 = Triangle.EncodedSubsegment(ss: m.dummysub, orientation: 0)
+            m.dummysub.adj2 = Triangle.EncodedSubsegment(ss: m.dummysub, orientation: 0)
 
-            m.dummysub.v1 = -1
-            m.dummysub.v2 = -1
-            m.dummysub.v3 = -1
-            m.dummysub.v4 = -1
+            m.dummysub.v1 = nil
+            m.dummysub.v2 = nil
+            m.dummysub.v3 = nil
+            m.dummysub.v4 = nil
 
-            m.dummysub.t1 = OrientedTriangle(triangle: m.dummytri, orientation: 0)
-            m.dummysub.t2 = OrientedTriangle(triangle: m.dummytri, orientation: 0)
+            m.dummysub.t1 = Triangle.EncodedTriangle(triangle: m.dummytri, orientation: 0)
+            m.dummysub.t2 = Triangle.EncodedTriangle(triangle: m.dummytri, orientation: 0)
 
             m.dummysub.marker = 0
-            let subSeg = EncodedSubsegment(ss: m.dummysub, orientation: 0)
+            let subSeg = Triangle.EncodedSubsegment(ss: m.dummysub, orientation: 0)
             m.dummytri.s1 = subSeg
             m.dummytri.s2 = subSeg
             m.dummytri.s3 = subSeg
         }
     }
 
-    private func divconqdelaunay(m: Mesh, b: Behavior) -> Int {
+    private static func divconqdelaunay(m: Mesh, b: Behavior) -> Int {
 
-        m.triangles.reserveCapacity(m.vertices.count / 3)
+        if b.verbose {
+            print("  Sorting vertices.")
+        }
+
+        /* Allocate an array of pointers to vertices for sorting. */
+        var sortarray = m.vertices.sorted { (lhs, rhs) -> Bool in
+            if lhs.x < rhs.x {
+                return true
+            } else if lhs.x > rhs.x {
+                return false
+            } else {
+                return lhs.y < rhs.y
+            }
+        }
+
+        /* Discard duplicate vertices, which can really mess up the algorithm. */
+        var i = 0
+        for j in 1..<m.invertices {
+            if (sortarray[i].x == sortarray[j].x) && (sortarray[i].y == sortarray[j].y) {
+                if !b.quiet {
+                    print("Warning:  A duplicate vertex at (%.12g, %.12g) appeared and was ignored.", sortarray[j].x, sortarray[j].y)
+                }
+                sortarray[j].state = .undead
+                m.undeads += 1
+            } else {
+                i += 1
+                sortarray[i] = sortarray[j]
+            }
+        }
+        i += 1
+        if b.dwyer {
+            /* Re-sort the array of vertices to accommodate alternating cuts. */
+            let divider = i >> 1
+            if i - divider >= 2 {
+                if divider >= 2 {
+                    alternateAxes(on: &sortarray[...], arraysize: divider, axis: 1)
+                }
+                alternateAxes(on: &sortarray[divider...], arraysize: i - divider, axis: 1)
+            }
+        }
 
         if b.verbose {
             print("  Forming triangulation.")
         }
 
-        /* Form the Delaunay triangulation. */
-        var hullleft = OrientedTriangle(triangle: m.dummytri, orientation: 0)
-        var hullright = OrientedTriangle(triangle: m.dummytri, orientation: 0)
-        divconqrecurse(at: 0, vertices: m.vertices.count, axis: 0, farleft: &hullleft, farright: &hullright)
+        for i in 0..<m.vertices.count {
+            if sortarray[i] !== m.vertices[i] {
+                print("FAIL!")
+            }
+        }
 
-        return removeghosts(startghost: hullleft)
+        /* Form the Delaunay triangulation. */
+        let hullleft = OrientedTriangle(triangle: m.dummytri, orient: 0)
+        let hullright = OrientedTriangle(triangle: m.dummytri, orient: 0)
+        divconqrecurse(m: m, b: b, sortarray: sortarray[...], vertices: i, axis: 0, farleft: hullleft, farright: hullright)
+
+        return removeghosts(m: m, b: b, startghost: hullleft)
     }
 
-    func removeghosts(startghost: OrientedTriangle) -> Int {
+    static func removeghosts(m: Mesh, b: Behavior, startghost: OrientedTriangle) -> Int {
 
         if b.verbose {
             print("  Removing ghost triangles.")
         }
         /* Find an edge on the convex hull to start point location from. */
-        var searchedge = startghost.lprev()
+        let searchedge = startghost.copy()
+        startghost.lprev(on: searchedge)
         searchedge.symself()
-        m.dummytri.t1 = searchedge
+        m.dummytri.t1 = searchedge.encodedTriangle
         /* Remove the bounding box and count the convex hull edges. */
 
-        var disolveedge = startghost
+        let disolveedge = startghost.copy()
         var hullsize = 0
         repeat {
             hullsize += 1
-            let deadtriangle = disolveedge.lnext()
+            let deadtriangle = disolveedge.copy()
+            disolveedge.lnext(on: deadtriangle)
 
             disolveedge.lprevself()
             disolveedge.symself()
@@ -349,41 +435,118 @@ public class Triangulator {
             /*   on the convex hull.  If a PSLG is used, this step is done later.   */
             if !b.poly {
                 /* Watch out for the case where all the input vertices are collinear. */
-                if disolveedge.triangle !== m.dummytri, m.vertices[disolveedge.org].mark == 0 {
-                    m.vertices[disolveedge.org].mark = 1
+                if disolveedge.triangle !== m.dummytri {
+                    let markorg = disolveedge.org
+                    if markorg?.mark == 0 {
+                        markorg?.mark = 1
+                    }
                 }
             }
             /* Remove a bounding triangle from a convex hull triangle. */
             disolveedge.disolve(m: m)
             /* Find the next bounding triangle. */
-            disolveedge = deadtriangle.sym()
+            deadtriangle.sym(to: disolveedge)
             /* Delete the bounding triangle. */
             //            triangledealloc(m, deadtriangle.tri);
             m.killTriangle(triangle: deadtriangle.triangle)
         } while !disolveedge.otriEquals(other: startghost)
-        m.removeAllDeadTriangles()
         return hullsize
     }
 
-    private func divconqrecurse(at start: Int, vertices: Int, axis: Int, farleft: inout OrientedTriangle, farright: inout OrientedTriangle) {
+    private static func alternateAxes(on sortarray: inout ArraySlice<Vertex>, arraysize: Int, axis axisIn: Int) {
+        var divider = 0
+        var axis = axisIn
+        divider = arraysize >> 1
+        if arraysize <= 3 {
+            /* Recursive base case:  subsets of two or three vertices will be    */
+            /*   handled specially, and should always be sorted by x-coordinate. */
+            axis = 0
+        }
+        /* Partition with a horizontal or vertical cut. */
+        vertexmedian(sortarray: &sortarray, arraysize: arraysize, median: divider, axis: axis)
+        /* Recursively partition the subsets with a cross cut. */
+        if arraysize - divider >= 2 {
+            if divider >= 2 {
+                alternateAxes(on: &sortarray, arraysize: divider, axis: 1 - axis)
+            }
+            alternateAxes(on: &sortarray[(sortarray.startIndex + divider)...], arraysize: arraysize - divider, axis: 1 - axis)
+        }
+    }
+
+    private static func vertexmedian(sortarray: inout ArraySlice<Vertex>, arraysize: Int, median: Int, axis: Int) {
+
+        let start = sortarray.startIndex
+        if sortarray.count == 2 {
+            /* Recursive base case. */
+            if (sortarray[start].realAt(axis: axis) > sortarray[start + 1].realAt(axis: axis)) ||
+                ((sortarray[start].realAt(axis: axis) == sortarray[start + 1].realAt(axis: axis)) &&
+                    (sortarray[start].realAt(axis: 1 - axis) > sortarray[start + 1].realAt(axis: 1 - axis))) {
+                let temp = sortarray[start + 1]
+                sortarray[start + 1] = sortarray[start]
+                sortarray[start] = temp
+            }
+            return
+        }
+        /* Choose a random pivot to split the array. */
+        let pivot = randomnation(choices: arraysize)
+        let pivot1 = sortarray[start + pivot].realAt(axis: axis)
+        let pivot2 = sortarray[start + pivot].realAt(axis: 1 - axis)
+        /* Split the array. */
+        var left = -1
+        var right = arraysize
+        while left < right {
+            /* Search for a vertex whose x-coordinate is too large for the left. */
+            repeat {
+                left += 1
+            } while ((left <= right) && ((sortarray[start + left].realAt(axis: axis) < pivot1) ||
+                ((sortarray[start + left].realAt(axis: axis) == pivot1) &&
+                    (sortarray[start + left].realAt(axis: 1 - axis) < pivot2))))
+            /* Search for a vertex whose x-coordinate is too small for the right. */
+            repeat {
+                right -= 1
+            } while ((left <= right) && ((sortarray[start + right].realAt(axis: axis) > pivot1) ||
+                ((sortarray[start + right].realAt(axis: axis) == pivot1) &&
+                    (sortarray[start + right].realAt(axis: 1 - axis) > pivot2))))
+            if left < right {
+                /* Swap the left and right vertices. */
+                let temp = sortarray[start + left]
+                sortarray[start + left] = sortarray[start + right]
+                sortarray[start + right] = temp
+            }
+        }
+        /* Unlike in vertexsort(), at most one of the following */
+        /*   conditionals is true.                             */
+        if left > median {
+            /* Recursively shuffle the left subset. */
+            vertexmedian(sortarray: &sortarray, arraysize: left, median: median, axis: axis)
+        }
+        if right < median - 1 {
+            /* Recursively shuffle the right subset. */
+            vertexmedian(sortarray: &sortarray[(start + (right + 1))...], arraysize: arraysize - right - 1,
+                         median: median - right - 1, axis: axis)
+        }
+    }
+
+    private static func divconqrecurse(m: Mesh, b: Behavior, sortarray: ArraySlice<Vertex>, vertices: Int, axis: Int, farleft: OrientedTriangle, farright: OrientedTriangle) {
         if b.verbose {
             print("  Triangulating \(vertices) vertices.")
         }
 
+        let start = sortarray.startIndex
         if vertices == 2 {
             /* The triangulation of two vertices is an edge.  An edge is */
             /*   represented by two bounding triangles.                  */
             let tmpl = m.makeTriangle(b: b)
             farleft.triangle = tmpl.triangle
-            farleft.orientation = 0
-            farleft.org = start
-            farleft.dest = start + 1
+            farleft.orient = 0
+            farleft.org = sortarray[start]
+            farleft.dest = sortarray[start + 1]
             /* The apex is intentionally left NULL. */
             let tmpr = m.makeTriangle(b: b)
             farright.triangle = tmpr.triangle
-            farright.orientation = 0
-            farright.org = start + 1
-            farright.dest = start
+            farright.orient = 0
+            farright.org = sortarray[start + 1]
+            farright.dest = sortarray[start]
             /* The apex is intentionally left NULL. */
             farleft.bond(to: farright)
             farleft.lprevself()
@@ -394,28 +557,28 @@ public class Triangulator {
             farleft.bond(to: farright)
             if b.verbose {
                 print("  Creating ")
-                printtriangle(t: farleft)
+                printtriangle(m: m, b: b, t: farleft)
                 print("  Creating ")
-                printtriangle(t: farright)
+                printtriangle(m: m, b: b, t: farright)
             }
-            farleft = farright.lprev()
+            farright.lprev(on: farleft)
             return
         } else if vertices == 3 {
-            var midtri = m.makeTriangle(b: b)
-            var tri1 = m.makeTriangle(b: b)
-            var tri2 = m.makeTriangle(b: b)
-            var tri3 = m.makeTriangle(b: b)
-            let area = predicates.counterClockwise(a: m.vertices[start], b: m.vertices[start + 1], c: m.vertices[start + 2])
+            let midtri = m.makeTriangle(b: b)
+            let tri1 = m.makeTriangle(b: b)
+            let tri2 = m.makeTriangle(b: b)
+            let tri3 = m.makeTriangle(b: b)
+            let area = counterclockwise(m: m, b: b, pa: sortarray[start], pb: sortarray[start + 1], pc: sortarray[start + 2])
 
             if area == 0 {
-                midtri.org = start
-                midtri.dest = start + 1
-                tri1.org = start + 1
-                tri1.dest = start
-                tri2.org  = start + 2
-                tri2.dest = start + 1
-                tri3.org = start + 1
-                tri3.dest = start + 2
+                midtri.org = sortarray[start]
+                midtri.dest = sortarray[start + 1]
+                tri1.org = sortarray[start + 1]
+                tri1.dest = sortarray[start]
+                tri2.org  = sortarray[start + 2]
+                tri2.dest = sortarray[start + 1]
+                tri3.org = sortarray[start + 1]
+                tri3.dest = sortarray[start + 2]
                 /* All apices are intentionally left NULL. */
                 midtri.bond(to: tri1)
                 tri2.bond(to: tri3)
@@ -434,34 +597,34 @@ public class Triangulator {
                 midtri.bond(to: tri1)
                 tri2.bond(to: tri3)
 
-                /* Ensure that the origin of `farleft' is m.vertices[0]. */
-                farleft = tri1
-                /* Ensure that the destination of `farright' is m.vertices[2]. */
-                farright = tri2
+                /* Ensure that the origin of `farleft' is sortarray[0]. */
+                tri1.copy(to: farleft)
+                /* Ensure that the destination of `farright' is sortarray[2]. */
+                tri2.copy(to: farright)
             } else {
                 /* The three vertices are not collinear; the triangulation is one */
                 /*   triangle, namely `midtri'.                                   */
-                midtri.org = start
-                tri1.dest = start
-                tri3.org = start
+                midtri.org = sortarray[start]
+                tri1.dest = sortarray[start]
+                tri3.org = sortarray[start]
                 /* Apices of tri1, tri2, and tri3 are left NULL. */
                 if area > 0.0 {
                     /* The vertices are in counterclockwise order. */
-                    midtri.dest = start + 1
-                    tri1.org = start + 1
-                    tri2.dest = start + 1
-                    midtri.apex = start + 2
-                    tri2.org = start + 2
-                    tri3.dest = start + 2
+                    midtri.dest = sortarray[start + 1]
+                    tri1.org = sortarray[start + 1]
+                    tri2.dest = sortarray[start + 1]
+                    midtri.apex = sortarray[start + 2]
+                    tri2.org = sortarray[start + 2]
+                    tri3.dest = sortarray[start + 2]
 
                 } else {
                     /* The vertices are in clockwise order. */
-                    midtri.dest = start + 2
-                    tri1.org = start + 2
-                    tri2.dest = start + 2
-                    midtri.apex = start + 1
-                    tri2.org = start + 1
-                    tri3.dest = start + 1
+                    midtri.dest = sortarray[start + 2]
+                    tri1.org = sortarray[start + 2]
+                    tri2.dest = sortarray[start + 2]
+                    midtri.apex = sortarray[start + 1]
+                    tri2.org = sortarray[start + 1]
+                    tri3.dest = sortarray[start + 1]
                 }
                 /* The topology does not depend on how the vertices are ordered. */
 
@@ -479,55 +642,58 @@ public class Triangulator {
                 tri2.lnextself()
                 tri3.lprevself()
                 tri2.bond(to: tri3)
-                /* Ensure that the origin of `farleft' is m.vertices[0]. */
-                farleft = tri1
-                /* Ensure that the destination of `farright' is m.vertices[2]. */
+                /* Ensure that the origin of `farleft' is sortarray[0]. */
+                tri1.copy(to: farleft)
+                /* Ensure that the destination of `farright' is sortarray[2]. */
                 if area > 0.0 {
-                    farright = tri2
+                    tri2.copy(to: farright)
+
                 } else {
-                    farright = farleft.lnext()
+                    farleft.lnext(on: farright)
 
                 }
             }
             if b.verbose {
                 print("  Creating ")
-                printtriangle(t: midtri)
+                printtriangle(m: m, b: b, t: midtri)
                 print("  Creating ")
-                printtriangle(t: tri1)
+                printtriangle(m: m, b: b, t: tri1)
                 print("  Creating ")
-                printtriangle(t: tri2)
+                printtriangle(m: m, b: b, t: tri2)
                 print("  Creating ")
-                printtriangle(t: tri3)
+                printtriangle(m: m, b: b, t: tri3)
             }
             return
         } else {
             /* Split the vertices in half. */
             let divider = vertices >> 1
             /* Recursively triangulate each half. */
-            var innerleft = OrientedTriangle(triangle: farleft.triangle, orientation: 0)
-            var innerright = OrientedTriangle(triangle: farright.triangle, orientation: 0)
-            divconqrecurse(at: start, vertices: divider, axis: 1 - axis, farleft: &farleft, farright: &innerleft)
-            divconqrecurse(at: (start + divider), vertices: vertices - divider, axis: 1 - axis,
-                           farleft: &innerright, farright: &farright)
+            let innerleft = OrientedTriangle(triangle: farleft.triangle, orient: 0)
+            let innerright = OrientedTriangle(triangle: farright.triangle, orient: 0)
+            divconqrecurse(m: m, b: b, sortarray: sortarray, vertices: divider, axis: 1 - axis, farleft: farleft, farright: innerleft)
+            divconqrecurse(m: m, b: b, sortarray: sortarray[(start + divider)...], vertices: vertices - divider, axis: 1 - axis,
+                           farleft: innerright, farright: farright)
             if b.verbose {
                 print("  Joining triangulations with \(divider) and \(vertices - divider) vertices.")
             }
             /* Merge the two triangulations into one. */
-            mergehulls(farleft: &farleft, innerleft: &innerleft, innerright: &innerright, farright: &farright, axis: axis)
+            mergehulls(m: m, b: b, farleft: farleft, innerleft: innerleft, innerright: innerright, farright: farright, axis: axis)
         }
     }
 
-    private func mergehulls(farleft: inout OrientedTriangle, innerleft: inout OrientedTriangle, innerright: inout OrientedTriangle, farright: inout OrientedTriangle, axis: Int) {
+    private static func mergehulls(m: Mesh, b: Behavior, farleft: OrientedTriangle,
+                                   innerleft: OrientedTriangle, innerright: OrientedTriangle,
+                                   farright: OrientedTriangle, axis: Int) {
 
-        var innerleftdest =  m.vertices[innerleft.dest]
-        var innerleftapex =  m.vertices[innerleft.apex]
-        var innerrightorg =  m.vertices[innerright.org]
-        var innerrightapex =  m.vertices[innerright.apex]
+        var innerleftdest = innerleft.dest
+        var innerleftapex = innerleft.apex
+        var innerrightorg = innerright.org
+        var innerrightapex = innerright.apex
         /* Special treatment for horizontal cuts. */
         if b.dwyer && (axis == 1) {
-            var farleftpt = m.vertices[farleft.org]
-            var farleftapex = m.vertices[farleft.apex]
-            var farrightpt = m.vertices[farright.dest]
+            var farleftpt = farleft.org!
+            var farleftapex = farleft.apex!
+            var farrightpt = farright.dest!
             /* The pointers to the extremal vertices are shifted to point to the */
             /*   topmost and bottommost vertex of each hull, rather than the     */
             /*   leftmost and rightmost vertices.                                */
@@ -535,31 +701,32 @@ public class Triangulator {
                 farleft.lnextself()
                 farleft.symself()
                 farleftpt = farleftapex
-                farleftapex = m.vertices[farleft.apex]
+                farleftapex = farleft.apex
             }
 
-            var checkedge = innerleft.sym()
-            var checkvertex =  m.vertices[checkedge.apex]
-            while checkvertex.y > innerleftdest.y {
-                innerleft = checkedge.lnext()
+            let checkedge = innerleft.sym()
+            var checkvertex = checkedge.apex!
+            while checkvertex.y > innerleftdest!.y {
+                checkedge.lnext(on: innerleft)
                 innerleftapex = innerleftdest
                 innerleftdest = checkvertex
-                checkedge = innerleft.sym()
-                checkvertex =  m.vertices[checkedge.apex]
+                innerleft.sym(to: checkedge)
+                checkvertex = checkedge.apex
             }
-            while innerrightapex.y < innerrightorg.y {
+            while innerrightapex!.y < innerrightorg!.y {
                 innerright.lnextself()
                 innerright.symself()
                 innerrightorg = innerrightapex
-                innerrightapex =  m.vertices[innerright.apex]
+                innerrightapex = innerright.apex
             }
-            checkedge = farright.sym()
-            checkvertex =  m.vertices[checkedge.apex]
+            farright.sym(to: checkedge)
+            checkvertex = checkedge.apex
             while checkvertex.y > farrightpt.y {
-                farright = checkedge.lnext()
+                checkedge.lnext(on: farright)
+                //                farrightapex = farrightpt
                 farrightpt = checkvertex
-                checkedge = farright.sym()
-                checkvertex =  m.vertices[checkedge.apex]
+                farright.sym(to: checkedge)
+                checkvertex = checkedge.apex
             }
         }
         /* Find a line tangent to and below both hulls. */
@@ -567,50 +734,50 @@ public class Triangulator {
         repeat {
             changemade = false
             /* Make innerleftdest the "bottommost" vertex of the left hull. */
-            if predicates.counterClockwise(a: innerleftdest, b: innerleftapex, c: innerrightorg) > 0.0 {
+            if counterclockwise(m: m, b: b, pa: innerleftdest!, pb: innerleftapex!, pc: innerrightorg!) > 0.0 {
                 innerleft.lprevself()
                 innerleft.symself()
                 innerleftdest = innerleftapex
-                innerleftapex =  m.vertices[innerleft.apex]
+                innerleftapex = innerleft.apex
                 changemade = true
             }
             /* Make innerrightorg the "bottommost" vertex of the right hull. */
-            if predicates.counterClockwise(a: innerrightapex, b: innerrightorg, c: innerleftdest) > 0.0 {
+            if counterclockwise(m: m, b: b, pa: innerrightapex!, pb: innerrightorg!, pc: innerleftdest!) > 0.0 {
                 innerright.lnextself()
                 innerright.symself()
                 innerrightorg = innerrightapex
-                innerrightapex =  m.vertices[innerright.apex]
+                innerrightapex = innerright.apex
                 changemade = true
             }
         } while (changemade)
         /* Find the two candidates to be the next "gear tooth." */
-        var leftcand = innerleft.sym()
-        var rightcand = innerright.sym()
+        let leftcand = innerleft.sym()
+        let rightcand = innerright.sym()
 
         /* Create the bottom new bounding triangle. */
-        var baseedge = m.makeTriangle(b: b)
+        let baseedge = m.makeTriangle(b: b)
         /* Connect it to the bounding boxes of the left and right triangulations. */
         baseedge.bond(to: innerleft)
         baseedge.lnextself()
         baseedge.bond(to: innerright)
 
         baseedge.lnextself()
-        baseedge.org = innerrightorg.id
-        baseedge.dest = innerleftdest.id
+        baseedge.org = innerrightorg
+        baseedge.dest = innerleftdest
 
         /* Apex is intentionally left NULL. */
         if b.verbose {
             print("  Creating base bounding ")
-            printtriangle(t: baseedge)
+            printtriangle(m: m, b: b, t: baseedge)
         }
         /* Fix the extreme triangles if necessary. */
         var farleftpt = farleft.org
-        if innerleftdest.id == farleftpt {
-            farleft = baseedge.lnext()
+        if innerleftdest === farleftpt {
+            baseedge.lnext(on: farleft)
         }
         var farrightpt = farright.dest
-        if innerrightorg.id == farrightpt {
-            farright = baseedge.lprev()
+        if innerrightorg === farrightpt {
+            baseedge.lprev(on: farright)
         }
         /* The vertices of the current knitting edge. */
         var lowerleft = innerleftdest
@@ -624,13 +791,13 @@ public class Triangulator {
             /*   because even though the left triangulation might seem finished now, */
             /*   moving up on the right triangulation might reveal a new vertex of   */
             /*   the left triangulation.  And vice-versa.)                           */
-            let leftfinished = predicates.counterClockwise(a: m.vertices[upperleft], b: lowerleft, c: lowerright) <= 0.0
-            let rightfinished = predicates.counterClockwise(a: m.vertices[upperright], b: lowerleft, c: lowerright) <= 0.0
+            let leftfinished = counterclockwise(m: m, b: b, pa: upperleft!, pb: lowerleft!, pc: lowerright!) <= 0.0
+            let rightfinished = counterclockwise(m: m, b: b, pa: upperright!, pb: lowerleft!, pc: lowerright!) <= 0.0
             if leftfinished && rightfinished {
                 /* Create the top new bounding triangle. */
-                var nextedge = m.makeTriangle(b: b)
-                nextedge.org = lowerleft.id
-                nextedge.dest = lowerright.id
+                let nextedge = m.makeTriangle(b: b)
+                nextedge.org = lowerleft
+                nextedge.dest = lowerright
                 /* Apex is intentionally left NULL. */
                 /* Connect it to the bounding boxes of the two triangulations. */
                 nextedge.bond(to: baseedge)
@@ -641,27 +808,27 @@ public class Triangulator {
 
                 if b.verbose {
                     print("  Creating top bounding ")
-                    printtriangle(t: nextedge)
+                    printtriangle(m: m, b: b, t: nextedge)
                 }
                 /* Special treatment for horizontal cuts. */
                 if b.dwyer && (axis == 1) {
-                    farleftpt =  farleft.org
+                    farleftpt = farleft.org
 
                     farrightpt = farright.dest
-                    var farrightapex = farright.apex
-                    var checkedge = farleft.sym()
-                    var checkvertex =  m.vertices[checkedge.apex]
+                    var farrightapex = farright.apex!
+                    let checkedge = farleft.sym()
+                    var checkvertex = checkedge.apex!
                     /* The pointers to the extremal vertices are restored to the  */
                     /*   leftmost and rightmost vertices (rather than topmost and */
                     /*   bottommost).                                             */
-                    while checkvertex.x <  m.vertices[farleftpt].x {
-                        farleft = checkedge.lprev()
+                    while checkvertex.x < farleftpt!.x {
+                        checkedge.lprev(on: farleft)
 
-                        farleftpt = checkvertex.id
-                        checkedge = farleft.sym()
-                        checkvertex =  m.vertices[checkedge.apex]
+                        farleftpt = checkvertex
+                        farleft.sym(to: checkedge)
+                        checkvertex = checkedge.apex
                     }
-                    while  m.vertices[farrightapex].x >  m.vertices[farrightpt].x {
+                    while farrightapex.x > farrightpt!.x {
                         farright.lprevself()
                         farright.symself()
                         farrightpt = farrightapex
@@ -673,15 +840,15 @@ public class Triangulator {
             /* Consider eliminating edges from the left triangulation. */
             if !leftfinished {
                 /* What vertex would be exposed if an edge were deleted? */
-                var nextedge = leftcand.lprev()
+                let nextedge = leftcand.lprev()
                 nextedge.symself()
 
                 /* If nextapex is NULL, then no vertex would be exposed; the */
                 /*   triangulation would have been eaten right through.      */
-                if nextedge.apex >= 0 {
-                    let nextapex = m.vertices[nextedge.apex]
+                let nextapex = nextedge.apex
+                if nextapex != nil {
                     /* Check whether the edge is Delaunay. */
-                    var badedge = predicates.inCircle(a: lowerleft.vert, b: lowerright.vert, c: m.vertices[upperleft].vert, d: nextapex.vert) > 0.0
+                    var badedge = Predicates.incircle(m, b, lowerleft!, lowerright!, upperleft!, nextapex!) > 0.0
                     while badedge {
                         /* Eliminate the edge with an edge flip.  As a result, the    */
                         /*   left triangulation will have one more boundary triangle. */
@@ -696,19 +863,19 @@ public class Triangulator {
                         nextedge.lprevself()
                         nextedge.bond(to: outercasing)
                         /* Correct the vertices to reflect the edge flip. */
-                        leftcand.org = lowerleft.id
-                        leftcand.dest = -1
-                        leftcand.apex = nextapex.id
-                        nextedge.org = -1
+                        leftcand.org = lowerleft
+                        leftcand.dest = nil
+                        leftcand.apex = nextapex
+                        nextedge.org = nil
                         nextedge.dest = upperleft
-                        nextedge.apex = nextapex.id
+                        nextedge.apex = nextapex
                         /* Consider the newly exposed vertex. */
-                        upperleft = nextapex.id
+                        upperleft = nextapex
                         /* What vertex would be exposed if another edge were deleted? */
-                        nextedge = sidecasing
-                        if nextapex.id != nextedge.apex {
+                        sidecasing.copy(to: nextedge)
+                        if nextapex !== nextedge.apex {
                             /* Check whether the edge is Delaunay. */
-                            badedge = predicates.inCircle(a: lowerleft.vert, b: lowerright.vert, c: m.vertices[upperleft].vert, d: nextapex.vert) > 0.0
+                            badedge = Predicates.incircle(m, b, lowerleft!, lowerright!, upperleft!, nextapex!) > 0.0
                         } else {
                             /* Avoid eating right through the triangulation. */
                             badedge = false
@@ -719,16 +886,16 @@ public class Triangulator {
             /* Consider eliminating edges from the right triangulation. */
             if !rightfinished {
                 /* What vertex would be exposed if an edge were deleted? */
-                var nextedge = rightcand.lnext()
+                let nextedge = rightcand.lnext()
 
                 nextedge.symself()
 
                 /* If nextapex is NULL, then no vertex would be exposed; the */
                 /*   triangulation would have been eaten right through.      */
                 var nextapex = nextedge.apex
-                if nextapex >= 0 {
+                if nextapex != nil {
                     /* Check whether the edge is Delaunay. */
-                    var badedge = predicates.inCircle(a: lowerleft.vert, b: lowerright.vert, c: m.vertices[upperright].vert, d: m.vertices[nextapex].vert) > 0.0
+                    var badedge = Predicates.incircle(m, b, lowerleft!, lowerright!, upperright!, nextapex!) > 0.0
                     while badedge {
                         /* Eliminate the edge with an edge flip.  As a result, the     */
                         /*   right triangulation will have one more boundary triangle. */
@@ -745,20 +912,20 @@ public class Triangulator {
 
                         /* Correct the vertices to reflect the edge flip. */
 
-                        rightcand.org = -1
-                        rightcand.dest = lowerright.id
+                        rightcand.org = nil
+                        rightcand.dest = lowerright
                         rightcand.apex = nextapex
                         nextedge.org = upperright
-                        nextedge.dest = -1
+                        nextedge.dest = nil
                         nextedge.apex = nextapex
                         /* Consider the newly exposed vertex. */
                         upperright = nextapex
                         /* What vertex would be exposed if another edge were deleted? */
-                        nextedge = sideCasing
+                        sideCasing.copy(to: nextedge)
                         nextapex = nextedge.apex
-                        if nextapex != -1 {
+                        if nextapex != nil {
                             /* Check whether the edge is Delaunay. */
-                            badedge = predicates.inCircle(a: lowerleft.vert, b: lowerright.vert, c: m.vertices[upperright].vert, d: m.vertices[nextapex].vert) > 0.0
+                            badedge = Predicates.incircle(m, b, lowerleft!, lowerright!, upperright!, nextapex!) > 0.0
                         } else {
                             /* Avoid eating right through the triangulation. */
                             badedge = false
@@ -766,35 +933,132 @@ public class Triangulator {
                     }
                 }
             }
-            if leftfinished || (!rightfinished && (predicates.inCircle(a: m.vertices[upperleft].vert, b: lowerleft.vert, c: lowerright.vert, d: m.vertices[upperright].vert) > 0.0)) {
+            if leftfinished || (!rightfinished && (Predicates.incircle(m, b, upperleft!, lowerleft!, lowerright!, upperright!) > 0.0)) {
                 /* Knit the triangulations, adding an edge from `lowerleft' */
                 /*   to `upperright'.                                       */
                 baseedge.bond(to: rightcand)
-                baseedge = rightcand.lprev()
-                baseedge.dest = lowerleft.id
-                lowerright = m.vertices[upperright]
-                rightcand = baseedge.sym()
+                rightcand.lprev(on: baseedge)
+                baseedge.dest = lowerleft
+                lowerright = upperright
+                baseedge.sym(to: rightcand)
                 upperright = rightcand.apex
             } else {
                 /* Knit the triangulations, adding an edge from `upperleft' */
                 /*   to `lowerright'.                                       */
                 baseedge.bond(to: leftcand)
-                baseedge = leftcand.lnext()
-                baseedge.org = lowerright.id
-                lowerleft = m.vertices[upperleft]
-                leftcand = baseedge.sym()
+                leftcand.lnext(on: baseedge)
+                baseedge.org = lowerright
+                lowerleft = upperleft
+                baseedge.sym(to: leftcand)
                 upperleft = leftcand.apex
             }
             if b.verbose {
                 print("  Connecting ")
-                printtriangle(t: baseedge)
+                printtriangle(m: m, b: b, t: baseedge)
             }
         }
     }
 
-    private func printtriangle(t: OrientedTriangle) {
+    private static func counterclockwise(m: Mesh, b: Behavior, pa: Vertex, pb: Vertex, pc: Vertex) -> REAL {
 
-        print("triangle \(t.triangle) with orientation \(t.orientation):")
+        m.counterclockcount += 1
+
+        let detleft = (pa.x - pc.x) * (pb.y - pc.y)
+        let detright = (pa.y - pc.y) * (pb.x - pc.x)
+        let det = detleft - detright
+
+        if b.noexact {
+            return det
+        }
+
+        var detsum: REAL
+
+        if detleft > 0.0 {
+            if detright <= 0.0 {
+                return det
+            } else {
+                detsum = detleft + detright
+            }
+        } else if detleft < 0.0 {
+            if detright >= 0.0 {
+                return det
+            } else {
+                detsum = -detleft - detright
+            }
+        } else {
+            return det
+        }
+
+        let errbound = Predicates.ccwerrboundA * detsum
+        if (det >= errbound) || (-det >= errbound) {
+            return det
+        }
+
+        return counterclockwiseadapt(pa: pa, pb: pb, pc: pc, detsum: detsum)
+    }
+
+    private static func counterclockwiseadapt(pa: Vertex, pb: Vertex, pc: Vertex, detsum: REAL) -> REAL {
+        let acx = (pa.x - pc.x)
+        let bcx = (pb.x - pc.x)
+        let acy = (pa.y - pc.y)
+        let bcy = (pb.y - pc.y)
+        var detleft: REAL = 0, detlefttail: REAL = 0
+        var detright: REAL = 0, detrighttail: REAL = 0
+
+        var B0: REAL = 0, B1: REAL = 0, B2: REAL = 0, B3: REAL = 0
+
+        Predicates.Two_Product(acx, bcy, &detleft, &detlefttail)
+        Predicates.Two_Product(acy, bcx, &detright, &detrighttail)
+
+        Predicates.Two_Two_Diff(detleft, detlefttail, detright, detrighttail, &B3, &B2, &B1, &B0)
+
+        var det = B0 + B1 + B2 + B3
+        var errbound = Predicates.ccwerrboundB * detsum
+        if (det >= errbound) || (-det >= errbound) {
+            return det
+        }
+
+        var acxtail: REAL = 0, bcxtail: REAL = 0, acytail: REAL = 0, bcytail: REAL = 0
+        Predicates.Two_Diff_Tail(pa.x, pc.x, acx, &acxtail)
+        Predicates.Two_Diff_Tail(pb.x, pc.x, bcx, &bcxtail)
+        Predicates.Two_Diff_Tail(pa.y, pc.y, acy, &acytail)
+        Predicates.Two_Diff_Tail(pb.y, pc.y, bcy, &bcytail)
+
+        if (acxtail == 0.0) && (acytail == 0.0) && (bcxtail == 0.0) && (bcytail == 0.0) {
+            return det
+        }
+
+        errbound = Predicates.ccwerrboundC * detsum + Predicates.resulterrbound * abs(det)
+        det += (acx * bcytail + bcy * acxtail) - (acy * bcxtail + bcx * acytail)
+        if (det >= errbound) || (-det >= errbound) {
+            return det
+        }
+
+        var s1: REAL = 0, s0: REAL = 0
+        var t1: REAL = 0, t0: REAL = 0
+        Predicates.Two_Product(acxtail, bcy, &s1, &s0)
+        Predicates.Two_Product(acytail, bcx, &t1, &t0)
+        var u0: REAL = 0, u1: REAL = 0, u2: REAL = 0, u3: REAL = 0
+        Predicates.Two_Two_Diff(s1, s0, t1, t0, &u3, &u2, &u1, &u0)
+
+        let C1 = Predicates.fast_expansion_sum_zeroelim([B0, B1, B2, B3], [u0, u1, u2, u3])
+
+        Predicates.Two_Product(acx, bcytail, &s1, &s0)
+        Predicates.Two_Product(acy, bcxtail, &t1, &t0)
+        Predicates.Two_Two_Diff(s1, s0, t1, t0, &u3, &u2, &u1, &u0)
+        let C2 = Predicates.fast_expansion_sum_zeroelim(C1, [u0, u1, u2, u3])
+
+        Predicates.Two_Product(acxtail, bcytail, &s1, &s0)
+        Predicates.Two_Product(acytail, bcxtail, &t1, &t0)
+        Predicates.Two_Two_Diff(s1, s0, t1, t0, &u3, &u2, &u1, &u0)
+        let D = Predicates.fast_expansion_sum_zeroelim(C2, [u0, u1, u2, u3])
+        return D.last ?? 0
+
+    }
+
+    private static func printtriangle(m: Mesh, b: Behavior, t: OrientedTriangle) {
+
+        print("triangle \(t.triangle) with orientation \(t.orient):")
         var printtri = t.triangle.t1!
         if printtri.triangle === m.dummytri {
             print("    [0] = Outer space")
@@ -814,25 +1078,22 @@ public class Triangulator {
             print("    [2] = \(printtri.triangle)  \(printtri.orientation)")
         }
 
-        if t.org >= 0 {
-            let printvertex = m.vertices[t.org]
-            print("    Origin[\((t.orientation + 1) % 3 + 3)] = \(printvertex)  (\(printvertex.x), \(printvertex.y))")
+        if let printvertex = t.org {
+            print("    Origin[\((t.orient + 1) % 3 + 3)] = \(printvertex)  (\(printvertex.x), \(printvertex.y))")
         } else {
-            print("    Origin[\((t.orientation + 1) % 3 + 3)] = NULL")
+            print("    Origin[\((t.orient + 1) % 3 + 3)] = NULL")
         }
 
-        if t.dest >= 0 {
-            let printvertex = m.vertices[t.dest]
-            print("    Dest  [\((t.orientation + 2) % 3 + 3)] = \(printvertex)  (\(printvertex.x), \(printvertex.y))")
+        if let printvertex = t.dest {
+            print("    Dest  [\((t.orient + 2) % 3 + 3)] = \(printvertex)  (\(printvertex.x), \(printvertex.y))")
         } else {
-            print("    Dest  [\((t.orientation + 2) % 3 + 3)] = NULL")
+            print("    Dest  [\((t.orient + 2) % 3 + 3)] = NULL")
         }
 
-        if t.apex >= 0 {
-            let printvertex = m.vertices[t.apex]
-            print("    Apex  [\(t.orientation + 3)] = \(printvertex)  (\(printvertex.x), \(printvertex.y))")
+        if let printvertex = t.apex {
+            print("    Apex  [\(t.orient + 3)] = \(printvertex)  (\(printvertex.x), \(printvertex.y))")
         } else {
-            print("    Apex  [\(t.orientation + 3)] = NULL")
+            print("    Apex  [\(t.orient + 3)] = NULL")
         }
 
         if b.usesegments {
@@ -850,12 +1111,12 @@ public class Triangulator {
             }
         }
 
-        //        if (b.vararea) {
-        //            print("    Area constraint:  %.4g", t.triangle.area);
-        //        }
+        if b.vararea {
+            print("    Area constraint:  %.4g", t.triangle.area)
+        }
     }
 
-    private func formskeleton(segmentlist: [Int], segmentmarkerlist: [Int]) {
+    private static func formskeleton(m: Mesh, b: Behavior, segmentlist: [Int], segmentmarkerlist: [Int]) {
 
         if b.poly {
             if !b.quiet {
@@ -902,14 +1163,14 @@ public class Triangulator {
                     }
                 } else {
                     /* Find the vertices numbered `end1' and `end2'. */
-                    let endpoint1 = m.vertices[end1]
-                    let endpoint2 = m.vertices[end2]
+                    let endpoint1 = m.vertices.first(where: { $0.id == end1 })!
+                    let endpoint2 = m.vertices.first(where: { $0.id == end2 })!
                     if (endpoint1.x == endpoint2.x) && (endpoint1.y == endpoint2.y) {
                         if !b.quiet {
                             print("Warning:  Endpoints of segment \(i) are coincident in %s.")
                         }
                     } else {
-                        insertsegment(endpoint1: endpoint1, endpoint2: endpoint2, newmark: boundmarker)
+                        insertsegment(m: m, b: b, endpoint1: endpoint1, endpoint2: endpoint2, newmark: boundmarker)
                     }
                 }
             }
@@ -925,42 +1186,43 @@ public class Triangulator {
         }
     }
 
-    private func markhull(m: Mesh, b: Behavior) {
+    private static func markhull(m: Mesh, b: Behavior) {
 
         /* Find a triangle handle on the hull. */
-        var hulltri = OrientedTriangle(triangle: m.dummytri, orientation: 0)
+        let hulltri = OrientedTriangle(triangle: m.dummytri, orient: 0)
         hulltri.symself()
 
         /* Remember where we started so we know when to stop. */
-        let starttri = hulltri
+        let starttri = hulltri.copy()
         /* Go once counterclockwise around the convex hull. */
         repeat {
             /* Create a subsegment if there isn't already one here. */
-            insertsubseg(tri: hulltri, subsegmark: 1)
+            insertsubseg(m: m, b: b, tri: hulltri, subsegmark: 1)
             /* To find the next hull edge, go clockwise around the next vertex. */
             hulltri.lnextself()
-            var nexttri = hulltri.oprev()
+            let nexttri = hulltri.oprev()
             while nexttri.triangle !== m.dummytri {
-                hulltri = nexttri
-                nexttri = hulltri.oprev()
+                nexttri.copy(to: hulltri)
+                hulltri.oprev(to: nexttri)
             }
         } while (!hulltri.otriEquals(other: starttri))
     }
 
-    private func makevertexmap(m: Mesh, b: Behavior) {
+    private static func makevertexmap(m: Mesh, b: Behavior) {
 
         if b.verbose {
             print("    Constructing mapping from vertices to triangles.")
         }
-        for triangle in m.triangles where !triangle.isDead {
+        for triangle in m.triangles {
             /* Check all three vertices of the triangle. */
             for i in 0..<3 {
-                let oriented = OrientedTriangle(triangle: triangle, orientation: i)
-                m.vertices[oriented.org].triangle = Vertex.TriIndex(id: triangle.id, orientation: i)
+                let oriented = OrientedTriangle(triangle: triangle, orient: i)
+                let triorg = oriented.org
+                triorg?.triangle = oriented.encodedTriangle
             }
         }
     }
-    private func insertsegment(endpoint1 ep1: Vertex, endpoint2 ep2: Vertex, newmark: Int) {
+    private static func insertsegment(m: Mesh, b: Behavior, endpoint1 ep1: Vertex, endpoint2 ep2: Vertex, newmark: Int) {
         var endpoint1 = ep1
         var endpoint2 = ep2
         if b.verbose {
@@ -969,20 +1231,20 @@ public class Triangulator {
 
         /* Find a triangle whose origin is the segment's first endpoint. */
         var checkvertex: Vertex?
-        var searchtri1 = OrientedTriangle(triangle: m.dummytri, orientation: 0)
+        var searchtri1 = OrientedTriangle(triangle: m.dummytri, orient: 0)
 
         if let encodedtri = endpoint1.triangle {
-            searchtri1 = OrientedTriangle(triangle: m.triangles[encodedtri.id], orientation: encodedtri.orientation)
-            checkvertex = m.vertices[searchtri1.org]
+            searchtri1 = OrientedTriangle(encoded: encodedtri)
+            checkvertex = searchtri1.org
         }
-        if checkvertex?.id != endpoint1.id {
+        if checkvertex !== endpoint1 {
             /* Find a boundary triangle to search from. */
-            searchtri1 = OrientedTriangle(triangle: m.dummytri, orientation: 0)
-            searchtri1.orientation = 0
+            searchtri1 = OrientedTriangle(triangle: m.dummytri, orient: 0)
+            searchtri1.orient = 0
             searchtri1.symself()
 
             /* Search for the segment's first endpoint by point location. */
-            if locate(searchpoint: endpoint1, searchtri: &searchtri1) != .onVertex {
+            if locate(m: m, b: b, searchpoint: endpoint1, searchtri: searchtri1) != .onVertex {
                 print( "Internal error in insertsegment():  Unable to locate PSLG vertex")
                 print("  (\(endpoint1.x), \(endpoint1.y)) in triangulation.")
                 fatalError("Couldn't locate endpoint")
@@ -993,27 +1255,27 @@ public class Triangulator {
 
         /* Scout the beginnings of a path from the first endpoint */
         /*   toward the second.                                   */
-        if scoutsegment(searchtri: &searchtri1, endpoint2: endpoint2, newmark: newmark) {
+        if scoutsegment(m: m, b: b, searchtri: searchtri1, endpoint2: endpoint2, newmark: newmark) {
             /* The segment was easily inserted. */
             return
         }
         /* The first endpoint may have changed if a collision with an intervening */
         /*   vertex on the segment occurred.                                      */
-        endpoint1 = m.vertices[searchtri1.org]
+        endpoint1 = searchtri1.org!
 
         /* Find a triangle whose origin is the segment's second endpoint. */
         checkvertex = nil
         var searchtri2: OrientedTriangle!
         if let encodedtri = endpoint2.triangle {
-            searchtri2 = OrientedTriangle(triangle: m.triangles[encodedtri.id], orientation: encodedtri.orientation)
-            checkvertex = m.vertices[searchtri2.org]
+            searchtri2 = OrientedTriangle(encoded: encodedtri)
+            checkvertex = searchtri2.org
         }
-        if checkvertex != endpoint2 {
+        if checkvertex !== endpoint2 {
             /* Find a boundary triangle to search from. */
-            searchtri2 = OrientedTriangle(triangle: m.dummytri, orientation: 0)
+            searchtri2 = OrientedTriangle(triangle: m.dummytri, orient: 0)
             searchtri2.symself()
             /* Search for the segment's second endpoint by point location. */
-            if locate(searchpoint: endpoint2, searchtri: &searchtri2) != .onVertex {
+            if locate(m: m, b: b, searchpoint: endpoint2, searchtri: searchtri2) != .onVertex {
                 print("Internal error in insertsegment():  Unable to locate PSLG vertex")
                 print("  (\(endpoint2.x), \(endpoint2.y)) in triangulation.")
                 fatalError()
@@ -1023,100 +1285,100 @@ public class Triangulator {
         m.recenttri = searchtri2.copy()
         /* Scout the beginnings of a path from the second endpoint */
         /*   toward the first.                                     */
-        if scoutsegment(searchtri: &searchtri2, endpoint2: endpoint1, newmark: newmark) {
+        if scoutsegment(m: m, b: b, searchtri: searchtri2, endpoint2: endpoint1, newmark: newmark) {
             /* The segment was easily inserted. */
             return
         }
         /* The second endpoint may have changed if a collision with an intervening */
         /*   vertex on the segment occurred.                                       */
-        endpoint2 = m.vertices[searchtri2.org]
+        endpoint2 = searchtri2.org!
 
         /* Insert the segment directly into the triangulation. */
-        constrainededge(starttri: searchtri1, endpoint2: endpoint2, newmark: newmark)
+        constrainededge(m: m, b: b, starttri: searchtri1, endpoint2: endpoint2, newmark: newmark)
     }
 
-    private func constrainededge(starttri: OrientedTriangle, endpoint2: Vertex, newmark: Int) {
+    private static func constrainededge(m: Mesh, b: Behavior, starttri: OrientedTriangle, endpoint2: Vertex, newmark: Int) {
 
-        let endpoint1 = starttri.org
-        var fixuptri = starttri.lnext()
-        flip(flipedge: &fixuptri)
+        let endpoint1 = starttri.org!
+        let fixuptri = starttri.lnext()
+        flip(m: m, b: b, flipedge: fixuptri)
         /* `collision' indicates whether we have found a vertex directly */
         /*   between endpoint1 and endpoint2.                            */
         var collision = false
         var done = false
         repeat {
-            let farvertex = m.vertices[fixuptri.org]
+            let farvertex = fixuptri.org!
             /* `farvertex' is the extreme point of the polygon we are "digging" */
             /*   to get from endpoint1 to endpoint2.                           */
             if (farvertex.x == endpoint2.x) && (farvertex.y == endpoint2.y) {
-                var fixuptri2 = fixuptri.oprev()
+                let fixuptri2 = fixuptri.oprev()
                 /* Enforce the Delaunay condition around endpoint2. */
-                delaunayfixup(fixuptri: &fixuptri, leftside: false)
-                delaunayfixup(fixuptri: &fixuptri2, leftside: true)
+                delaunayfixup(m: m, b: b, fixuptri: fixuptri, leftside: false)
+                delaunayfixup(m: m, b: b, fixuptri: fixuptri2, leftside: true)
                 done = true
             } else {
                 /* Check whether farvertex is to the left or right of the segment */
                 /*   being inserted, to decide which edge of fixuptri to dig      */
                 /*   through next.                                                */
-                let area = predicates.counterClockwise(a: m.vertices[endpoint1], b: endpoint2, c: farvertex)
+                let area = counterclockwise(m: m, b: b, pa: endpoint1, pb: endpoint2, pc: farvertex)
                 if area == 0.0 {
                     /* We've collided with a vertex between endpoint1 and endpoint2. */
                     collision = true
-                    var fixuptri2 = fixuptri.oprev()
+                    let fixuptri2 = fixuptri.oprev()
                     /* Enforce the Delaunay condition around farvertex. */
-                    delaunayfixup(fixuptri: &fixuptri, leftside: false)
-                    delaunayfixup(fixuptri: &fixuptri2, leftside: true)
+                    delaunayfixup(m: m, b: b, fixuptri: fixuptri, leftside: false)
+                    delaunayfixup(m: m, b: b, fixuptri: fixuptri2, leftside: true)
                     done = true
                 } else {
                     if area > 0.0 {        /* farvertex is to the left of the segment. */
-                        var fixuptri2 = fixuptri.oprev()
+                        let fixuptri2 = fixuptri.oprev()
                         /* Enforce the Delaunay condition around farvertex, on the */
                         /*   left side of the segment only.                        */
-                        delaunayfixup(fixuptri: &fixuptri2, leftside: true)
+                        delaunayfixup(m: m, b: b, fixuptri: fixuptri2, leftside: true)
                         /* Flip the edge that crosses the segment.  After the edge is */
                         /*   flipped, one of its endpoints is the fan vertex, and the */
                         /*   destination of fixuptri is the fan vertex.               */
                         fixuptri.lprevself()
                     } else {                /* farvertex is to the right of the segment. */
-                        delaunayfixup(fixuptri: &fixuptri, leftside: false)
+                        delaunayfixup(m: m, b: b, fixuptri: fixuptri, leftside: false)
                         /* Flip the edge that crosses the segment.  After the edge is */
                         /*   flipped, one of its endpoints is the fan vertex, and the */
                         /*   destination of fixuptri is the fan vertex.               */
                         fixuptri.oprevself()
                     }
                     /* Check for two intersecting segments. */
-                    var crosssubseg = fixuptri.tspivot()
+                    let crosssubseg = fixuptri.tspivot()
                     if crosssubseg.subsegment === m.dummysub {
-                        flip(flipedge: &fixuptri);    /* May create inverted triangle at left. */
+                        flip(m: m, b: b, flipedge: fixuptri);    /* May create inverted triangle at left. */
                     } else {
                         /* We've collided with a segment between endpoint1 and endpoint2. */
                         collision = true
                         /* Insert a vertex at the intersection. */
-                        segmentintersection(splittri: &fixuptri, splitsubseg: &crosssubseg, endpoint2: endpoint2)
+                        segmentintersection(m: m, b: b, splittri: fixuptri, splitsubseg: crosssubseg, endpoint2: endpoint2)
                         done = true
                     }
                 }
             }
         } while (!done)
         /* Insert a subsegment to make the segment permanent. */
-        insertsubseg(tri: fixuptri, subsegmark: newmark)
+        insertsubseg(m: m, b: b, tri: fixuptri, subsegmark: newmark)
         /* If there was a collision with an interceding vertex, install another */
         /*   segment connecting that vertex with endpoint2.                     */
         if collision {
             /* Insert the remainder of the segment. */
-            if !scoutsegment(searchtri: &fixuptri, endpoint2: endpoint2, newmark: newmark) {
-                constrainededge(starttri: fixuptri, endpoint2: endpoint2, newmark: newmark)
+            if !scoutsegment(m: m, b: b, searchtri: fixuptri, endpoint2: endpoint2, newmark: newmark) {
+                constrainededge(m: m, b: b, starttri: fixuptri, endpoint2: endpoint2, newmark: newmark)
             }
         }
     }
 
-    private func flip(flipedge: inout OrientedTriangle) {
+    private static func flip(m: Mesh, b: Behavior, flipedge: OrientedTriangle) {
 
         /* Identify the vertices of the quadrilateral. */
         let rightvertex = flipedge.org
         let leftvertex = flipedge.dest
         let botvertex = flipedge.apex
-        var top = flipedge.sym()
+        let top = flipedge.sym()
         //    #ifdef SELF_CHECK
         //        if (top.tri == m->dummytri) {
         //            printf("Internal error in flip():  Attempt to flip on boundary.\n");
@@ -1190,16 +1452,16 @@ public class Triangulator {
         top.apex = leftvertex
         if b.verbose {
             print("  Edge flip results in left ")
-            printtriangle(t: top)
+            printtriangle(m: m, b: b, t: top)
             print("  and right ")
-            printtriangle(t: flipedge)
+            printtriangle(m: m, b: b, t: flipedge)
         }
     }
 
-    private func delaunayfixup(fixuptri: inout OrientedTriangle, leftside: Bool) {
+    private static func delaunayfixup(m: Mesh, b: Behavior, fixuptri: OrientedTriangle, leftside: Bool) {
 
-        var neartri = fixuptri.lnext()
-        var fartri = neartri.sym()
+        let neartri = fixuptri.lnext()
+        let fartri = neartri.sym()
         /* Check if the edge opposite the origin of fixuptri can be flipped. */
         if fartri.triangle === m.dummytri {
             return
@@ -1209,40 +1471,40 @@ public class Triangulator {
             return
         }
         /* Find all the relevant vertices. */
-        let nearvertex = m.vertices[neartri.apex]
-        let leftvertex = m.vertices[neartri.org]
-        let rightvertex = m.vertices[neartri.dest]
-        let farvertex = m.vertices[fartri.apex]
+        let nearvertex = neartri.apex!
+        let leftvertex = neartri.org!
+        let rightvertex = neartri.dest!
+        let farvertex = fartri.apex!
         /* Check whether the previous polygon vertex is a reflex vertex. */
         if leftside {
-            if predicates.counterClockwise(a: nearvertex, b: leftvertex, c: farvertex) <= 0.0 {
+            if counterclockwise(m: m, b: b, pa: nearvertex, pb: leftvertex, pc: farvertex) <= 0.0 {
                 /* leftvertex is a reflex vertex too.  Nothing can */
                 /*   be done until a convex section is found.      */
                 return
             }
         } else {
-            if predicates.counterClockwise(a: farvertex, b: rightvertex, c: nearvertex) <= 0.0 {
+            if counterclockwise(m: m, b: b, pa: farvertex, pb: rightvertex, pc: nearvertex) <= 0.0 {
                 /* rightvertex is a reflex vertex too.  Nothing can */
                 /*   be done until a convex section is found.       */
                 return
             }
         }
-        if predicates.counterClockwise(a: rightvertex, b: leftvertex, c: farvertex) > 0.0 {
+        if counterclockwise(m: m, b: b, pa: rightvertex, pb: leftvertex, pc: farvertex) > 0.0 {
             /* fartri is not an inverted triangle, and farvertex is not a reflex */
             /*   vertex.  As there are no reflex vertices, fixuptri isn't an     */
             /*   inverted triangle, either.  Hence, test the edge between the    */
             /*   triangles to ensure it is locally Delaunay.                     */
-            if predicates.inCircle(a: leftvertex.vert, b: farvertex.vert, c: rightvertex.vert, d: nearvertex.vert) <=
+            if Predicates.incircle(m, b, leftvertex, farvertex, rightvertex, nearvertex) <=
                 0.0 {
                 return
             }
             /* Not locally Delaunay; go on to an edge flip. */
         }        /* else fartri is inverted; remove it from the stack by flipping. */
-        flip(flipedge: &neartri)
+        flip(m: m, b: b, flipedge: neartri)
         fixuptri.lprevself();    /* Restore the origin of fixuptri after the flip. */
         /* Recursively process the two triangles that result from the flip. */
-        delaunayfixup(fixuptri: &fixuptri, leftside: leftside)
-        delaunayfixup(fixuptri: &fartri, leftside: leftside)
+        delaunayfixup(m: m, b: b, fixuptri: fixuptri, leftside: leftside)
+        delaunayfixup(m: m, b: b, fixuptri: fartri, leftside: leftside)
     }
 
     /* Labels that signify the result of point location.  The result of a        */
@@ -1257,14 +1519,14 @@ public class Triangulator {
 
     }
 
-    private func locate(searchpoint: Vertex, searchtri: inout OrientedTriangle) -> LocateResult {
+    private static func locate(m: Mesh, b: Behavior, searchpoint: Vertex, searchtri: OrientedTriangle) -> LocateResult {
 
         if b.verbose {
             print("  Randomly sampling for a triangle near point (\(searchpoint.x), \(searchpoint.y)).")
         }
         /* Record the distance from the suggested starting triangle to the */
         /*   point we seek.                                                */
-        var torg = m.vertices[searchtri.org]
+        var torg = searchtri.org!
         let dx = (searchpoint.x - torg.x)
         let dy = (searchpoint.y - torg.y)
         var searchdist = (dx * dx) + (dy * dy)
@@ -1275,16 +1537,16 @@ public class Triangulator {
         /* If a recently encountered triangle has been recorded and has not been */
         /*   deallocated, test it as a good starting point.                      */
         if let recent = m.recenttri, !recent.triangle.isDead {
-            torg = m.vertices[recent.org]
+            torg = recent.org!
             if (torg.x == searchpoint.x) && (torg.y == searchpoint.y) {
-                searchtri = recent
+                recent.copy(to: searchtri)
                 return .onVertex
             }
 
             let dist = (searchpoint.x - torg.x) * (searchpoint.x - torg.x) +
                 (searchpoint.y - torg.y) * (searchpoint.y - torg.y)
             if dist < searchdist {
-                searchtri = recent
+                recent.copy(to: searchtri)
                 searchdist = dist
                 if b.verbose {
                     print("    Choosing recent triangle with origin (\(torg.x), \(torg.y)).")
@@ -1292,13 +1554,13 @@ public class Triangulator {
             }
 
         }
-        var sampletri = OrientedTriangle(triangle: searchtri.triangle, orientation: 0)
-        for triangle in m.triangles where !triangle.isDead {
-            sampletri.triangle = triangle
-            torg = m.vertices[sampletri.org]
+        let sampletri = OrientedTriangle(triangle: searchtri.triangle, orient: 0)
+        for triange in m.triangles {
+            sampletri.triangle = triange
+            torg = sampletri.org!
             let dist = (searchpoint.x - torg.x) * (searchpoint.x - torg.x) + (searchpoint.y - torg.y) * (searchpoint.y - torg.y)
             if dist < searchdist {
-                sampletri.copy(to: &searchtri)
+                sampletri.copy(to: searchtri)
                 searchdist = dist
                 if b.verbose {
                     print("    Choosing triangle with origin (\(torg.x), \(torg.y)).")
@@ -1308,8 +1570,8 @@ public class Triangulator {
         }
 
         /* Where are we? */
-        torg = m.vertices[searchtri.org]
-        let tdest = m.vertices[searchtri.dest]
+        torg = searchtri.org!
+        let tdest = searchtri.dest!
         /* Check the starting triangle's vertices. */
         if (torg.x == searchpoint.x) && (torg.y == searchpoint.y) {
             return .onVertex
@@ -1319,7 +1581,7 @@ public class Triangulator {
             return .onVertex
         }
         /* Orient `searchtri' to fit the preconditions of calling preciselocate(). */
-        let ahead = predicates.counterClockwise(a: torg, b: tdest, c: searchpoint)
+        let ahead = counterclockwise(m: m, b: b, pa: torg, pb: tdest, pc: searchpoint)
         if ahead < 0.0 {
             /* Turn around so that `searchpoint' is to the left of the */
             /*   edge specified by `searchtri'.                        */
@@ -1330,18 +1592,18 @@ public class Triangulator {
                 return .onEdge
             }
         }
-        return preciselocate(searchpoint: searchpoint, searchtri: &searchtri, stopatsubsegment: false)
+        return preciselocate(m: m, b: b, searchpoint: searchpoint, searchtri: searchtri, stopatsubsegment: false)
     }
 
-    private func preciselocate(searchpoint: Vertex, searchtri: inout OrientedTriangle, stopatsubsegment: Bool) -> LocateResult {
+    private static func preciselocate(m: Mesh, b: Behavior, searchpoint: Vertex, searchtri: OrientedTriangle, stopatsubsegment: Bool) -> LocateResult {
 
         if b.verbose {
             print("  Searching for point ( \(searchpoint.x), \(searchpoint.y)).")
         }
         /* Where are we? */
-        var forg = m.vertices[searchtri.org]
-        var fdest = m.vertices[searchtri.dest]
-        var fapex = m.vertices[searchtri.apex]
+        var forg = searchtri.org!
+        var fdest = searchtri.dest!
+        var fapex = searchtri.apex!
         while true {
             if b.verbose {
                 print("    At ( \(forg.x), \(forg.y)) (\(fdest.x), \(fdest.y)) (\(fapex.x), \(fapex.y))")
@@ -1353,10 +1615,10 @@ public class Triangulator {
             }
             /* Does the point lie on the other side of the line defined by the */
             /*   triangle edge opposite the triangle's destination?            */
-            let destorient = predicates.counterClockwise(a: forg, b: fapex, c: searchpoint)
+            let destorient = counterclockwise(m: m, b: b, pa: forg, pb: fapex, pc: searchpoint)
             /* Does the point lie on the other side of the line defined by the */
             /*   triangle edge opposite the triangle's origin?                 */
-            let orgorient = predicates.counterClockwise(a: fapex, b: fdest, c: searchpoint)
+            let orgorient = counterclockwise(m: m, b: b, pa: fapex, pb: fdest, pc: searchpoint)
             let moveleft: Bool
             if destorient > 0.0 {
                 if orgorient > 0.0 {
@@ -1387,25 +1649,25 @@ public class Triangulator {
                 }
             }
 
-            var backtracktri = searchtri.copy()
+            let backtracktri = searchtri.copy()
             /* Move to another triangle.  Leave a trace `backtracktri' in case */
             /*   floating-point roundoff or some such bogey causes us to walk  */
             /*   off a boundary of the triangulation.                          */
             if moveleft {
-                searchtri.lprev(on: &backtracktri)
+                searchtri.lprev(on: backtracktri)
                 fdest = fapex
             } else {
-                searchtri.lnext(on: &backtracktri)
+                searchtri.lnext(on: backtracktri)
                 forg = fapex
             }
-            backtracktri.sym(to: &searchtri)
+            backtracktri.sym(to: searchtri)
 
             if m.checksegments && stopatsubsegment {
                 /* Check for walking through a subsegment. */
                 let checkedge = backtracktri.tspivot()
                 if checkedge.subsegment !== m.dummysub {
                     /* Go back to the last triangle. */
-                    backtracktri.copy(to: &searchtri)
+                    backtracktri.copy(to: searchtri)
 
                     return .outside
                 }
@@ -1413,65 +1675,65 @@ public class Triangulator {
             /* Check for walking right out of the triangulation. */
             if searchtri.triangle === m.dummytri {
                 /* Go back to the last triangle. */
-                backtracktri.copy(to: &searchtri)
+                backtracktri.copy(to: searchtri)
                 return .outside
             }
 
-            fapex = m.vertices[searchtri.apex]
+            fapex = searchtri.apex!
         }
     }
 
-    private func scoutsegment(searchtri: inout OrientedTriangle, endpoint2: Vertex, newmark: Int) -> Bool {
+    private static func scoutsegment(m: Mesh, b: Behavior, searchtri: OrientedTriangle, endpoint2: Vertex, newmark: Int) -> Bool {
 
-        let collinear = finddirection(searchtri: &searchtri, searchpoint: endpoint2)
-        let rightvertex = m.vertices[searchtri.dest]
-        let leftvertex = m.vertices[searchtri.apex]
+        let collinear = finddirection(m: m, b: b, searchtri: searchtri, searchpoint: endpoint2)
+        let rightvertex = searchtri.dest!
+        let leftvertex = searchtri.apex!
         if ((leftvertex.x == endpoint2.x) && (leftvertex.y == endpoint2.y)) || ((rightvertex.x == endpoint2.x) && (rightvertex.y == endpoint2.y)) {
             /* The segment is already an edge in the mesh. */
             if (leftvertex.x == endpoint2.x) && (leftvertex.y == endpoint2.y) {
                 searchtri.lprevself()
             }
             /* Insert a subsegment, if there isn't already one there. */
-            insertsubseg(tri: searchtri, subsegmark: newmark)
+            insertsubseg(m: m, b: b, tri: searchtri, subsegmark: newmark)
             return true
         } else if collinear == .leftCollinear {
             /* We've collided with a vertex between the segment's endpoints. */
             /* Make the collinear vertex be the triangle's origin. */
             searchtri.lprevself()
-            insertsubseg(tri: searchtri, subsegmark: newmark)
+            insertsubseg(m: m, b: b, tri: searchtri, subsegmark: newmark)
             /* Insert the remainder of the segment. */
-            return scoutsegment(searchtri: &searchtri, endpoint2: endpoint2, newmark: newmark)
+            return scoutsegment(m: m, b: b, searchtri: searchtri, endpoint2: endpoint2, newmark: newmark)
         } else if collinear == .rightCollinear {
             /* We've collided with a vertex between the segment's endpoints. */
-            insertsubseg(tri: searchtri, subsegmark: newmark)
+            insertsubseg(m: m, b: b, tri: searchtri, subsegmark: newmark)
             /* Make the collinear vertex be the triangle's origin. */
             searchtri.lnextself()
             /* Insert the remainder of the segment. */
-            return scoutsegment(searchtri: &searchtri, endpoint2: endpoint2, newmark: newmark)
+            return scoutsegment(m: m, b: b, searchtri: searchtri, endpoint2: endpoint2, newmark: newmark)
         } else {
-            var crosstri = searchtri.lnext()
-            var crosssubseg = crosstri.tspivot()
+            let crosstri = searchtri.lnext()
+            let crosssubseg = crosstri.tspivot()
 
             /* Check for a crossing segment. */
             if crosssubseg.subsegment === m.dummysub {
                 return false
             } else {
                 /* Insert a vertex at the intersection. */
-                segmentintersection(splittri: &crosstri, splitsubseg: &crosssubseg, endpoint2: endpoint2)
-                searchtri = crosstri
-                insertsubseg(tri: searchtri, subsegmark: newmark)
+                segmentintersection(m: m, b: b, splittri: crosstri, splitsubseg: crosssubseg, endpoint2: endpoint2)
+                crosstri.copy(to: searchtri)
+                insertsubseg(m: m, b: b, tri: searchtri, subsegmark: newmark)
                 /* Insert the remainder of the segment. */
-                return scoutsegment(searchtri: &searchtri, endpoint2: endpoint2, newmark: newmark)
+                return scoutsegment(m: m, b: b, searchtri: searchtri, endpoint2: endpoint2, newmark: newmark)
             }
         }
     }
 
-    private func segmentintersection(splittri: inout OrientedTriangle, splitsubseg: inout OrientedSubsegment, endpoint2: Vertex) {
+    private static func segmentintersection(m: Mesh, b: Behavior, splittri: OrientedTriangle, splitsubseg: OrientedSubsegment, endpoint2: Vertex) {
 
         /* Find the other three segment endpoints. */
-        let endpoint1 = m.vertices[splittri.apex]
-        let torg = m.vertices[splittri.org]
-        let tdest = m.vertices[splittri.dest]
+        let endpoint1 = splittri.apex!
+        let torg = splittri.org!
+        let tdest = splittri.dest!
         /* Segment intersection formulae; see the Antonio reference. */
         let tx = tdest.x - torg.x
         let ty = tdest.y - torg.y
@@ -1490,10 +1752,10 @@ public class Triangulator {
         /* Interpolate its coordinate and attributes. */
         let x = torg.x + split * (tdest.x - torg.x)
         let y = torg.y + split * (tdest.y - torg.y)
-        //        let z = torg.z + split * (tdest.z - torg.z);
+        let z = torg.z + split * (tdest.z - torg.z)
 
         /* Create the new vertex. */
-        var newvertex = m.createVertex(x: x, y: y)
+        let newvertex = m.createVertex(x: x, y: y, z: z)
 
         if m.nextras > 1 {
             print("THIS NEED TO BE FIXED!")
@@ -1509,40 +1771,39 @@ public class Triangulator {
             print("  Splitting subsegment (\(torg.x), \(torg.y)) (\(tdest.x), \(tdest.y)) at (\(newvertex.x), \(newvertex.y)).")
         }
         /* Insert the intersection vertex.  This should always succeed. */
-        let success = insertvertex(newvertex: newvertex, searchtri: &splittri, splitseg: splitsubseg, segmentflaws: false, triflaws: false)
+        let success = insertvertex(m: m, b: b, newvertex: newvertex, searchtri: splittri, splitseg: splitsubseg, segmentflaws: false, triflaws: false)
         if success != .successful {
             print("Internal error in segmentintersection():\n")
             print("  Failure to split a segment.\n")
             fatalError("Internal error in segmentintersection \(#line)")
         }
         /* Record a triangle whose origin is the new vertex. */
-        newvertex.triangle = Vertex.TriIndex(id: splittri.triangle.id, orientation: splittri.orientation)
+        newvertex.triangle = splittri.encodedTriangle
         if m.steinerleft > 0 {
             m.steinerleft -= 1
         }
 
-        m.vertices[newvertex.id] = newvertex
         /* Divide the segment into two, and correct the segment endpoints. */
 
         splitsubseg.ssymself()
-        var opposubseg = splitsubseg.spivot()
+        let opposubseg = splitsubseg.spivot()
         splitsubseg.sdissolve(m: m)
         opposubseg.sdissolve(m: m)
 
         repeat {
-            splitsubseg.segorg = newvertex.id
+            splitsubseg.segorg = newvertex
             splitsubseg.snextself()
         } while (splitsubseg.subsegment !== m.dummysub)
         repeat {
-            opposubseg.segorg = newvertex.id
+            opposubseg.segorg = newvertex
             opposubseg.snextself()
         } while (opposubseg.subsegment !== m.dummysub)
 
         /* Inserting the vertex may have caused edge flips.  We wish to rediscover */
         /*   the edge connecting endpoint1 to the new intersection vertex.         */
-        _ = finddirection(searchtri: &splittri, searchpoint: endpoint1)
-        let rightvertex = m.vertices[splittri.dest]
-        let leftvertex = m.vertices[splittri.apex]
+        _ = finddirection(m: m, b: b, searchtri: splittri, searchpoint: endpoint1)
+        let rightvertex = splittri.dest!
+        let leftvertex = splittri.apex!
         if (leftvertex.x == endpoint1.x) && (leftvertex.y == endpoint1.y) {
             splittri.onextself()
         } else if (rightvertex.x != endpoint1.x) || (rightvertex.y != endpoint1.y) {
@@ -1559,16 +1820,16 @@ public class Triangulator {
         case rightCollinear
     }
 
-    private func finddirection(searchtri: inout OrientedTriangle, searchpoint: Vertex) -> FindDirectionResult {
+    private static func finddirection(m: Mesh, b: Behavior, searchtri: OrientedTriangle, searchpoint: Vertex) -> FindDirectionResult {
 
-        let startvertex = m.vertices[searchtri.org]
-        var rightvertex = m.vertices[searchtri.dest]
-        var leftvertex = m.vertices[searchtri.apex]
+        let startvertex = searchtri.org!
+        var rightvertex = searchtri.dest!
+        var leftvertex = searchtri.apex!
         /* Is `searchpoint' to the left? */
-        var leftccw = predicates.counterClockwise(a: searchpoint, b: startvertex, c: leftvertex)
+        var leftccw = counterclockwise(m: m, b: b, pa: searchpoint, pb: startvertex, pc: leftvertex)
         var leftflag = leftccw > 0.0
         /* Is `searchpoint' to the right? */
-        var rightccw = predicates.counterClockwise(a: startvertex, b: searchpoint, c: rightvertex)
+        var rightccw = counterclockwise(m: m, b: b, pa: startvertex, pb: searchpoint, pc: rightvertex)
         var rightflag = rightccw > 0.0
         if leftflag && rightflag {
             /* `searchtri' faces directly away from `searchpoint'.  We could go left */
@@ -1588,9 +1849,9 @@ public class Triangulator {
                 print("  triangle leading from (\(startvertex.x),\(startvertex.y)) to  (\(searchpoint.x), \(searchpoint.y))." )
                 fatalError("Invalid")
             }
-            leftvertex = m.vertices[searchtri.apex]
+            leftvertex = searchtri.apex
             rightccw = leftccw
-            leftccw = predicates.counterClockwise(a: searchpoint, b: startvertex, c: leftvertex)
+            leftccw = counterclockwise(m: m, b: b, pa: searchpoint, pb: startvertex, pc: leftvertex)
             leftflag = leftccw > 0.0
         }
         while rightflag {
@@ -1601,9 +1862,9 @@ public class Triangulator {
                 print("  triangle leading from (\(startvertex.x),\(startvertex.y)) to  (\(searchpoint.x), \(searchpoint.y))." )
                 fatalError("Invalid")
             }
-            rightvertex = m.vertices[searchtri.dest]
+            rightvertex = searchtri.dest!
             leftccw = rightccw
-            rightccw = predicates.counterClockwise(a: startvertex, b: searchpoint, c: rightvertex)
+            rightccw = counterclockwise(m: m, b: b, pa: startvertex, pb: searchpoint, pc: rightvertex)
             rightflag = rightccw > 0.0
         }
         if leftccw == 0.0 {
@@ -1615,22 +1876,22 @@ public class Triangulator {
         }
     }
 
-    private func insertsubseg(tri: OrientedTriangle, subsegmark: Int) {
+    private static func insertsubseg(m: Mesh, b: Behavior, tri: OrientedTriangle, subsegmark: Int) {
 
         let triorg = tri.org
         let tridest = tri.dest
         /* Mark vertices if possible. */
-        if triorg >= 0, m.vertices[triorg].mark == 0 {
-            m.vertices[triorg].mark = subsegmark
+        if triorg?.mark == 0 {
+            triorg?.mark = subsegmark
         }
-        if tridest >= 0, m.vertices[tridest].mark == 0 {
-            m.vertices[tridest].mark = subsegmark
+        if tridest?.mark == 0 {
+            tridest?.mark = subsegmark
         }
         /* Check if there's already a subsegment here. */
-        var newsubseg = tri.tspivot()
+        let newsubseg = tri.tspivot()
         if newsubseg.subsegment === m.dummysub {
             /* Make new subsegment and initialize its vertices. */
-            var newsubseg = m.makesubseg()
+            let newsubseg = m.makesubseg()
             newsubseg.sorg = tridest
             newsubseg.sdest = triorg
             newsubseg.segorg = tridest
@@ -1648,7 +1909,7 @@ public class Triangulator {
             newsubseg.mark = subsegmark
             if b.verbose {
                 print("  Inserting new ")
-                printsubseg(s: newsubseg)
+                printsubseg(m: m, b: b, s: newsubseg)
             }
         } else {
             if newsubseg.mark == 0 {
@@ -1657,7 +1918,7 @@ public class Triangulator {
         }
     }
 
-    private func printsubseg(s: OrientedSubsegment) {
+    private static func printsubseg(m: Mesh, b: Behavior, s: OrientedSubsegment) {
         print("subsegment \(s.subsegment) with orientation \(s.orient) and mark \(s.subsegment.marker):")
 
         if let printsh = s.subsegment.adj1 {
@@ -1676,15 +1937,13 @@ public class Triangulator {
             }
         }
 
-        if s.sorg >= 0 {
-            let printvertex = m.vertices[s.sorg]
+        if let printvertex = s.sorg {
             print("    Origin[\(2 + s.orient)] = \(printvertex)  (\(printvertex.x), \(printvertex.y))")
         } else {
             print("    Origin[\(2 + s.orient)] = NULL")
         }
 
-        if s.sdest >= 0 {
-            let printvertex = m.vertices[s.sdest]
+        if let printvertex = s.sdest {
             print("    Dest  [\(3 - s.orient)] = \(printvertex)  (\(printvertex.x), \(printvertex.y))")
 
         } else {
@@ -1707,15 +1966,13 @@ public class Triangulator {
             }
         }
 
-        if s.segorg >= 0 {
-            let printvertex = m.vertices[s.segorg]
+        if let printvertex = s.segorg {
             print("    Segment origin[\(4 + s.orient)] = \(printvertex)  (\(printvertex.x), \(printvertex.y))")
         } else {
             print("    Segment origin[\(4 + s.orient)] = NULL")
         }
 
-        if s.segdest >= 0 {
-            let printvertex = m.vertices[s.segdest]
+        if let printvertex = s.segdest {
             print("    Segment dest  [\(5 - s.orient)] = \(printvertex)  (\(printvertex.x), \(printvertex.y))")
         } else {
             print("    Segment dest  [\(5 - s.orient)] = NULL")
@@ -1730,14 +1987,14 @@ public class Triangulator {
         case duplicate
     }
 
-    private func insertvertex(newvertex: Vertex, searchtri: inout OrientedTriangle, splitseg: OrientedSubsegment?, segmentflaws: Bool, triflaws: Bool) -> InsertVertexResult {
+    private static func insertvertex(m: Mesh, b: Behavior, newvertex: Vertex, searchtri: OrientedTriangle, splitseg: OrientedSubsegment?, segmentflaws: Bool, triflaws: Bool) -> InsertVertexResult {
 
         if b.verbose {
             print("  Inserting (\(newvertex.x), \(newvertex.y)).")
         }
 
         var intersect: LocateResult
-        var horiz: OrientedTriangle
+        let horiz: OrientedTriangle
 
         if splitseg != nil {
             /* The calling routine provides the subsegment in which */
@@ -1749,21 +2006,21 @@ public class Triangulator {
             /*   starting triangle has already been provided by the caller.     */
             if searchtri.triangle === m.dummytri {
                 /* Find a boundary triangle. */
-                horiz = OrientedTriangle(triangle: m.dummytri, orientation: 0)
+                horiz = OrientedTriangle(triangle: m.dummytri, orient: 0)
                 horiz.symself()
                 /* Search for a triangle containing `newvertex'. */
-                intersect = locate(searchpoint: newvertex, searchtri: &horiz)
+                intersect = locate(m: m, b: b, searchpoint: newvertex, searchtri: horiz)
             } else {
                 /* Start searching from the triangle provided by the caller. */
                 horiz = searchtri.copy()
-                intersect = preciselocate(searchpoint: newvertex, searchtri: &horiz, stopatsubsegment: true)
+                intersect = preciselocate(m: m, b: b, searchpoint: newvertex, searchtri: horiz, stopatsubsegment: true)
             }
         }
 
         if intersect == .onVertex {
             /* There's already a vertex there.  Return in `searchtri' a triangle */
             /*   whose origin is the existing vertex.                            */
-            searchtri = horiz
+            horiz.copy(to: searchtri)
             m.recenttri = horiz.copy()
 
             return .duplicate
@@ -1788,18 +2045,16 @@ public class Triangulator {
 
                         if enq {
                             /* Add the subsegment to the list of encroached subsegments. */
-                            let encroached = m.createbadSubSeg(seg: brokensubseg.encodedSubsegment, org: brokensubseg.sorg, dest: brokensubseg.sdest)
+                            let encroached = m.createbadSubSeg(seg: brokensubseg.encodedSubsegment, org: brokensubseg.sorg!, dest: brokensubseg.sdest!)
                             if b.verbose {
-                                let enc = m.vertices[encroached.subsegOrg]
-                                let dest = m.vertices[encroached.subsegDest]
-                                print("  Queueing encroached subsegment (\(enc.x), \(enc.y)) (\(dest.x), \(dest.y)).")
+                                print("  Queueing encroached subsegment (\(encroached.subsegOrg.x), \(encroached.subsegOrg.y)) (\(encroached.subsegDest.x), \(encroached.subsegDest.y)).")
                             }
                         }
                     }
                     /* Return a handle whose primary edge contains the vertex, */
                     /*   which has not been inserted.                          */
-                    searchtri = horiz
-                    m.recenttri = horiz
+                    horiz.copy(to: searchtri)
+                    m.recenttri = horiz.copy()
                     return .violating
                 }
             }
@@ -1809,7 +2064,7 @@ public class Triangulator {
 
             let botright = horiz.lprev()
             let botrcasing = botright.sym()
-            var topright = horiz.sym()
+            let topright = horiz.sym()
             var toprcasing: OrientedTriangle!
             var newtopright: OrientedTriangle!
             /* Is there a second triangle?  (Or does this edge lie on a boundary?) */
@@ -1822,7 +2077,7 @@ public class Triangulator {
                 /* Splitting a boundary edge increases the number of boundary edges. */
                 m.hullsize += 1
             }
-            var newbotright = m.makeTriangle(b: b)
+            let newbotright = m.makeTriangle(b: b)
 
             /* Set the vertices of changed and new triangles. */
             let rightvertex = horiz.org
@@ -1830,30 +2085,30 @@ public class Triangulator {
             let botvertex = horiz.apex
             newbotright.org = botvertex
             newbotright.dest = rightvertex
-            newbotright.apex = newvertex.id
-            horiz.org = newvertex.id
+            newbotright.apex = newvertex
+            horiz.org = newvertex
 
             /* Set the element attributes of a new triangle. */
-            //            newbotright.triangle.attributes = botright.triangle.attributes
+            newbotright.triangle.attributes = botright.triangle.attributes
 
-            //            if (b.vararea) {
-            //                /* Set the area constraint of a new triangle. */
-            //                newbotright.triangle.area = botright.triangle.area
-            //            }
+            if b.vararea {
+                /* Set the area constraint of a new triangle. */
+                newbotright.triangle.area = botright.triangle.area
+            }
             if mirrorflag {
                 let topvertex = topright.dest
                 newtopright.org = rightvertex
                 newtopright.dest = topvertex
-                newtopright.apex = newvertex.id
-                topright.org = newvertex.id
+                newtopright.apex = newvertex
+                topright.org = newvertex
 
                 /* Set the element attributes of another new triangle. */
-                //                newtopright.triangle.attributes = topright.triangle.attributes
+                newtopright.triangle.attributes = topright.triangle.attributes
 
-                //                if b.vararea {
-                //                    /* Set the area constraint of another new triangle. */
-                //                    newtopright.triangle.area = topright.triangle.area
-                //                }
+                if b.vararea {
+                    /* Set the area constraint of another new triangle. */
+                    newtopright.triangle.area = topright.triangle.area
+                }
             }
 
             /* There may be subsegments that need to be bonded */
@@ -1887,26 +2142,26 @@ public class Triangulator {
                 newtopright.bond(to: newbotright)
             }
 
-            if var splitseg = splitseg {
+            if let splitseg = splitseg {
                 /* Split the subsegment into two. */
-                splitseg.sdest = newvertex.id
+                splitseg.sdest = newvertex
                 let segmentorg = splitseg.segorg
                 let segmentdest = splitseg.segdest
                 splitseg.ssymself()
-                var rightsubseg = splitseg.spivot()
-                insertsubseg(tri: newbotright, subsegmark: splitseg.mark)
-                var newsubseg = newbotright.tspivot()
+                let rightsubseg = splitseg.spivot()
+                insertsubseg(m: m, b: b, tri: newbotright, subsegmark: splitseg.mark)
+                let newsubseg = newbotright.tspivot()
                 newsubseg.segorg = segmentorg
                 newsubseg.segdest = segmentdest
-                splitseg.sbond(to: &newsubseg)
+                splitseg.sbond(to: newsubseg)
 
                 newsubseg.ssymself()
-                newsubseg.sbond(to: &rightsubseg)
+                newsubseg.sbond(to: rightsubseg)
                 splitseg.ssymself()
                 /* Transfer the subsegment's boundary marker to the vertex */
                 /*   if required.                                          */
                 if newvertex.mark == 0 {
-                    m.vertices[newvertex.id].mark = splitseg.mark
+                    newvertex.mark = splitseg.mark
                 }
             }
 
@@ -1952,15 +2207,15 @@ public class Triangulator {
             //    #endif /* SELF_CHECK */
             if b.verbose {
                 print("  Updating bottom left ")
-                printtriangle(t: botright)
+                printtriangle(m: m, b: b, t: botright)
                 if mirrorflag {
                     print("  Updating top left ")
-                    printtriangle(t: topright)
+                    printtriangle(m: m, b: b, t: topright)
                     print("  Creating top right ")
-                    printtriangle(t: newtopright)
+                    printtriangle(m: m, b: b, t: newtopright)
                 }
                 print("  Creating bottom right ")
-                printtriangle(t: newbotright)
+                printtriangle(m: m, b: b, t: newbotright)
             }
 
             /* Position `horiz' on the first edge to check for */
@@ -1972,8 +2227,8 @@ public class Triangulator {
             let botright = horiz.lprev()
             let botlcasing = botleft.sym()
             let botrcasing = botright.sym()
-            var newbotleft = m.makeTriangle(b: b)
-            var newbotright = m.makeTriangle(b: b)
+            let newbotleft = m.makeTriangle(b: b)
+            let newbotright = m.makeTriangle(b: b)
 
             /* Set the vertices of changed and new triangles. */
             let rightvertex = horiz.org
@@ -1981,20 +2236,20 @@ public class Triangulator {
             let botvertex = horiz.apex
             newbotleft.org = leftvertex
             newbotleft.dest = botvertex
-            newbotleft.apex = newvertex.id
+            newbotleft.apex = newvertex
             newbotright.org = botvertex
             newbotright.dest = rightvertex
-            newbotright.apex = newvertex.id
-            horiz.apex = newvertex.id
-            //            newbotleft.triangle.attributes = horiz.triangle.attributes
-            //            newbotright.triangle.attributes = horiz.triangle.attributes
+            newbotright.apex = newvertex
+            horiz.apex = newvertex
+            newbotleft.triangle.attributes = horiz.triangle.attributes
+            newbotright.triangle.attributes = horiz.triangle.attributes
 
-            //            if b.vararea {
-            //                /* Set the area constraint of the new triangles. */
-            //                let area = horiz.triangle.area
-            //                newbotleft.triangle.area = area
-            //                newbotright.triangle.area = area
-            //            }
+            if b.vararea {
+                /* Set the area constraint of the new triangles. */
+                let area = horiz.triangle.area
+                newbotleft.triangle.area = area
+                newbotright.triangle.area = area
+            }
 
             /* There may be subsegments that need to be bonded */
             /*   to the new triangles.                         */
@@ -2051,11 +2306,11 @@ public class Triangulator {
             //    #endif /* SELF_CHECK */
             if b.verbose {
                 print("  Updating top ")
-                printtriangle(t: horiz)
+                printtriangle(m: m, b: b, t: horiz)
                 print("  Creating left ")
-                printtriangle(t: newbotleft)
+                printtriangle(m: m, b: b, t: newbotleft)
                 print("  Creating right ")
-                printtriangle(t: newbotright)
+                printtriangle(m: m, b: b, t: newbotright)
             }
         }
 
@@ -2066,9 +2321,9 @@ public class Triangulator {
         /*   it for the Delaunay property.  Non-Delaunay edges are flipped.     */
         /*   `horiz' is always the edge being checked.  `first' marks where to  */
         /*   stop circling.                                                     */
-        let first = m.vertices[horiz.org]
+        let first = horiz.org!
         var rightvertex = first
-        var leftvertex = m.vertices[horiz.dest]
+        var leftvertex = horiz.dest!
         /* Circle until finished. */
         while true {
             /* By default, the edge will be flipped. */
@@ -2082,7 +2337,7 @@ public class Triangulator {
                     doflip = false
                     if segmentflaws {
                         /* Does the new vertex encroach upon this subsegment? */
-                        if checkseg4encroach(testsubseg: checksubseg) != 0 {
+                        if checkseg4encroach(m: m, b: b, testsubseg: checksubseg) != 0 {
                             success = .encroaching
                         }
                     }
@@ -2092,43 +2347,43 @@ public class Triangulator {
 
             if doflip {
                 /* Check if the edge is a boundary edge. */
-                var top = horiz.sym()
+                let top = horiz.sym()
                 if top.triangle === m.dummytri {
                     /* The edge is a boundary edge and cannot be flipped. */
                     doflip = false
                 } else {
                     /* Find the vertex on the other side of the edge. */
-                    let farvertex = m.vertices[top.apex]
+                    let farvertex = top.apex!
                     /* In the incremental Delaunay triangulation algorithm, any of      */
                     /*   `leftvertex', `rightvertex', and `farvertex' could be vertices */
                     /*   of the triangular bounding box.  These vertices must be        */
                     /*   treated as if they are infinitely distant, even though their   */
                     /*   "coordinates" are not.                                         */
-                    if (leftvertex == m.infvertex1) || (leftvertex == m.infvertex2) || (leftvertex == m.infvertex3) {
+                    if (leftvertex === m.infvertex1) || (leftvertex === m.infvertex2) || (leftvertex === m.infvertex3) {
                         /* `leftvertex' is infinitely distant.  Check the convexity of  */
                         /*   the boundary of the triangulation.  'farvertex' might be   */
                         /*   infinite as well, but trust me, this same condition should */
                         /*   be applied.                                                */
-                        doflip = predicates.counterClockwise(a: newvertex, b: rightvertex, c: farvertex) > 0.0
-                    } else if rightvertex == m.infvertex1 || rightvertex == m.infvertex2 || rightvertex == m.infvertex3 {
+                        doflip = counterclockwise(m: m, b: b, pa: newvertex, pb: rightvertex, pc: farvertex) > 0.0
+                    } else if rightvertex === m.infvertex1 || rightvertex === m.infvertex2 || rightvertex === m.infvertex3 {
                         /* `rightvertex' is infinitely distant.  Check the convexity of */
                         /*   the boundary of the triangulation.  'farvertex' might be   */
                         /*   infinite as well, but trust me, this same condition should */
                         /*   be applied.                                                */
-                        doflip = predicates.counterClockwise(a: farvertex, b: leftvertex, c: newvertex) > 0.0
-                    } else if farvertex == m.infvertex1 || farvertex == m.infvertex2 || farvertex == m.infvertex3 {
+                        doflip = counterclockwise(m: m, b: b, pa: farvertex, pb: leftvertex, pc: newvertex) > 0.0
+                    } else if farvertex === m.infvertex1 || farvertex === m.infvertex2 || farvertex === m.infvertex3 {
                         /* `farvertex' is infinitely distant and cannot be inside */
                         /*   the circumcircle of the triangle `horiz'.            */
                         doflip = false
                     } else {
                         /* Test whether the edge is locally Delaunay. */
-                        doflip = predicates.inCircle(a: leftvertex.vert, b: newvertex.vert, c: rightvertex.vert, d: farvertex.vert) > 0.0
+                        doflip = Predicates.incircle(m, b, leftvertex, newvertex, rightvertex, farvertex) > 0.0
                     }
                     if doflip {
                         /* We made it!  Flip the edge `horiz' by rotating its containing */
                         /*   quadrilateral (the two triangles adjacent to `horiz').      */
                         /* Identify the casing of the quadrilateral. */
-                        var topleft = top.lprev()
+                        let topleft = top.lprev()
                         let toplcasing = topleft.sym()
                         let topright = top.lnext()
                         let toprcasing = topright.sym()
@@ -2170,31 +2425,31 @@ public class Triangulator {
                             }
                         }
                         /* New vertex assignments for the rotated quadrilateral. */
-                        horiz.org = farvertex.id
-                        horiz.dest = newvertex.id
-                        horiz.apex = rightvertex.id
-                        top.org = newvertex.id
-                        top.dest = farvertex.id
-                        top.apex = leftvertex.id
-                        //                        for i in 0..<m.eextras {
-                        //                            /* Take the average of the two triangles' attributes. */
-                        //                            let attrib = 0.5 * (top.triangle.attributes[i] + horiz.triangle.attributes[i]);
-                        //                            top.triangle.attributes[i] = attrib
-                        //                            horiz.triangle.attributes[i] = attrib
-                        //                        }
-                        //                        if b.vararea {
-                        //                            let area: REAL
-                        //                            if top.triangle.area <= 0.0 || horiz.triangle.area <= 0.0 {
-                        //                                area = -1.0
-                        //                            } else {
-                        //                                /* Take the average of the two triangles' area constraints.    */
-                        //                                /*   This prevents small area constraints from migrating a     */
-                        //                                /*   long, long way from their original location due to flips. */
-                        //                                area = 0.5 * (top.triangle.area + horiz.triangle.area);
-                        //                            }
-                        //                            top.triangle.area = area
-                        //                            horiz.triangle.area = area
-                        //                        }
+                        horiz.org = farvertex
+                        horiz.dest = newvertex
+                        horiz.apex = rightvertex
+                        top.org = newvertex
+                        top.dest = farvertex
+                        top.apex = leftvertex
+                        for i in 0..<m.eextras {
+                            /* Take the average of the two triangles' attributes. */
+                            let attrib = 0.5 * (top.triangle.attributes[i] + horiz.triangle.attributes[i])
+                            top.triangle.attributes[i] = attrib
+                            horiz.triangle.attributes[i] = attrib
+                        }
+                        if b.vararea {
+                            let area: REAL
+                            if top.triangle.area <= 0.0 || horiz.triangle.area <= 0.0 {
+                                area = -1.0
+                            } else {
+                                /* Take the average of the two triangles' area constraints.    */
+                                /*   This prevents small area constraints from migrating a     */
+                                /*   long, long way from their original location due to flips. */
+                                area = 0.5 * (top.triangle.area + horiz.triangle.area)
+                            }
+                            top.triangle.area = area
+                            horiz.triangle.area = area
+                        }
 
                         //                        if (m.checkquality) {
                         //                            newflip = (struct flipstacker *) poolalloc(&m.flipstackers);
@@ -2235,9 +2490,9 @@ public class Triangulator {
                         if b.verbose {
                             print("  Edge flip results in left ")
                             topleft.lnextself()
-                            printtriangle(t: topleft)
+                            printtriangle(m: m, b: b, t: topleft)
                             print("  and right ")
-                            printtriangle(t: horiz)
+                            printtriangle(m: m, b: b, t: horiz)
                         }
                         /* On the next iterations, consider the two edges that were  */
                         /*   exposed (this is, are now visible to the newly inserted */
@@ -2251,7 +2506,7 @@ public class Triangulator {
                 /* The handle `horiz' is accepted as locally Delaunay. */
                 if triflaws {
                     /* Check the triangle `horiz' for quality. */
-                    testtriangle(testtri: horiz)
+                    testtriangle(m: m, b: b, testtri: horiz)
                 }
 
                 /* Look for the next edge around the newly inserted vertex. */
@@ -2260,25 +2515,25 @@ public class Triangulator {
                 /* Check for finishing a complete revolution about the new vertex, or */
                 /*   falling outside  of the triangulation.  The latter will happen   */
                 /*   when a vertex is inserted at a boundary.                         */
-                if (leftvertex == first) || (testtri.triangle === m.dummytri) {
+                if (leftvertex === first) || (testtri.triangle === m.dummytri) {
                     /* We're done.  Return a triangle whose origin is the new vertex. */
-                    searchtri = horiz.lnext()
+                    horiz.lnext(on: searchtri)
                     m.recenttri = horiz.lnext()
                     return success
                 }
                 /* Finish finding the next edge around the newly inserted vertex. */
 
-                testtri.lnext(on: &horiz)
+                testtri.lnext(on: horiz)
                 rightvertex = leftvertex
-                leftvertex = m.vertices[horiz.dest]
+                leftvertex = horiz.dest!
             }
         }
     }
 
-    private func checkseg4encroach(testsubseg: OrientedSubsegment) -> Int {
+    private static func checkseg4encroach(m: Mesh, b: Behavior, testsubseg: OrientedSubsegment) -> Int {
 
-        let eorg = m.vertices[testsubseg.sorg]
-        let edest = m.vertices[testsubseg.sdest]
+        let eorg = testsubseg.sorg!
+        let edest = testsubseg.sdest!
         /* Check one neighbor of the subsegment. */
         var neighbortri = testsubseg.stpivot()
         /* Does the neighbor exist, or is this a boundary edge? */
@@ -2289,7 +2544,7 @@ public class Triangulator {
         if neighbortri.triangle !== m.dummytri {
             sides += 1
             /* Find a vertex opposite this subsegment. */
-            let eapex = m.vertices[neighbortri.apex]
+            let eapex = neighbortri.apex!
             /* Check whether the apex is in the diametral lens of the subsegment */
             /*   (the diametral circle if `conformdel' is set).  A dot product   */
             /*   of two sides of the triangle is used to check whether the angle */
@@ -2315,7 +2570,7 @@ public class Triangulator {
         if neighbortri.triangle !== m.dummytri {
             sides += 1
             /* Find the other vertex opposite this subsegment. */
-            let eapex = m.vertices[neighbortri.apex]
+            let eapex = neighbortri.apex!
             /* Check whether the apex is in the diametral lens of the subsegment */
             /*   (or the diametral circle, if `conformdel' is set).              */
             let dotproduct = (eorg.x - eapex.x) * (edest.x - eapex.x) + (eorg.y - eapex.y) * (edest.y - eapex.y)
@@ -2340,20 +2595,20 @@ public class Triangulator {
             /*   Be sure to get the orientation right.                   */
 
             if encroached == 1 {
-                _ = m.createbadSubSeg(seg: testsubseg.encodedSubsegment, org: eorg.id, dest: edest.id)
+                _ = m.createbadSubSeg(seg: testsubseg.encodedSubsegment, org: eorg, dest: edest)
             } else {
-                _ = m.createbadSubSeg(seg: testsym.encodedSubsegment, org: edest.id, dest: eorg.id)
+                _ = m.createbadSubSeg(seg: testsym.encodedSubsegment, org: edest, dest: eorg)
             }
         }
 
         return encroached
     }
 
-    private func testtriangle(testtri: OrientedTriangle) {
+    private static func testtriangle(m: Mesh, b: Behavior, testtri: OrientedTriangle) {
 
-        let torg = m.vertices[testtri.org]
-        let tdest = m.vertices[testtri.dest]
-        let tapex = m.vertices[testtri.apex]
+        let torg = testtri.org!
+        let tdest = testtri.dest!
+        let tapex = testtri.apex!
         let dxod = torg.x - tdest.x
         let dyod = torg.y - tdest.y
         let dxda = tdest.x - tapex.x
@@ -2371,7 +2626,7 @@ public class Triangulator {
         let orglen = dxda2 + dyda2
         let destlen = dxao2 + dyao2
 
-        var tri1: OrientedTriangle
+        let tri1: OrientedTriangle
         let base1: Vertex
         let base2: Vertex
         var angle: REAL
@@ -2449,28 +2704,28 @@ public class Triangulator {
                 var testsub = tri1.tspivot()
                 if testsub.subsegment === m.dummysub {
                     /* No common segment.  Find a subsegment that contains `torg'. */
-                    var tri2 = tri1.copy()
+                    let tri2 = tri1.copy()
                     repeat {
                         tri1.oprevself()
                         testsub = tri1.tspivot()
                     } while (testsub.subsegment === m.dummysub)
                     /* Find the endpoints of the containing segment. */
-                    let org1 = testsub.segorg
-                    let dest1 = testsub.segdest
+                    let org1 = testsub.segorg!
+                    let dest1 = testsub.segdest!
                     /* Find a subsegment that contains `tdest'. */
                     repeat {
                         tri2.dnextself()
                         testsub = tri2.tspivot()
                     } while (testsub.subsegment === m.dummysub)
                     /* Find the endpoints of the containing segment. */
-                    let org2 = testsub.segorg
-                    let dest2 = testsub.segdest
+                    let org2 = testsub.segorg!
+                    let dest2 = testsub.segdest!
                     /* Check if the two containing segments have an endpoint in common. */
                     var joinvertex: Vertex?
-                    if m.vertices[dest1].x == m.vertices[org2].x && m.vertices[dest1].y == m.vertices[org2].y {
-                        joinvertex = m.vertices[dest1]
-                    } else if m.vertices[org1].x == m.vertices[dest2].x && m.vertices[org1].y == m.vertices[dest2].y {
-                        joinvertex = m.vertices[org1]
+                    if dest1.x == org2.x && dest1.y == org2.y {
+                        joinvertex = dest1
+                    } else if org1.x == dest2.x && org1.y == dest2.y {
+                        joinvertex = org1
                     }
                     if let joinvertex = joinvertex {
                         /* Compute the distance from the common endpoint (of the two  */
@@ -2494,7 +2749,7 @@ public class Triangulator {
         }
     }
 
-    private func carveholes(holelist: [Vector2], regionlist: [REAL]) {
+    private static func carveholes(m: Mesh, b: Behavior, holelist: [Vector2], regionlist: [REAL]) {
 
         if !(b.quiet || (b.noholes && b.convex)) {
             print("Removing unwanted triangles.")
@@ -2529,22 +2784,22 @@ public class Triangulator {
                 /* Ignore holes that aren't within the bounds of the mesh. */
                 if (vert.x >= m.xmin) && (vert.x <= m.xmax) && (vert.y >= m.ymin) && (vert.y <= m.ymax) {
                     /* Start searching from some triangle on the outer boundary. */
-                    var searchtri = OrientedTriangle(triangle: m.dummytri, orientation: 0)
+                    let searchtri = OrientedTriangle(triangle: m.dummytri, orient: 0)
                     searchtri.symself()
 
                     /* Ensure that the hole is to the left of this boundary edge; */
                     /*   otherwise, locate() will falsely report that the hole    */
                     /*   falls within the starting triangle.                      */
-                    let searchorg = m.vertices[searchtri.org]
-                    let searchdest = m.vertices[searchtri.dest]
-                    let tmpVert = Vertex(id: -1, x: vert.x, y: vert.y)
-                    if predicates.counterClockwise(a: searchorg, b: searchdest, c: tmpVert) > 0.0 {
+                    let searchorg = searchtri.org!
+                    let searchdest = searchtri.dest!
+                    let tmpVert = Vertex(id: -1, x: vert.x, y: vert.y, z: 0)
+                    if counterclockwise(m: m, b: b, pa: searchorg, pb: searchdest, pc: tmpVert) > 0.0 {
                         /* Find a triangle that contains the hole. */
-                        let intersect = locate(searchpoint: tmpVert, searchtri: &searchtri)
-                        if (intersect != .outside) && (!m.triangles[searchtri.id].infected) {
+                        let intersect = locate(m: m, b: b, searchpoint: tmpVert, searchtri: searchtri)
+                        if (intersect != .outside) && (!searchtri.infected) {
                             /* Infect the triangle.  This is done by marking the triangle  */
                             /*   as infected and including the triangle in the virus pool. */
-                            m.triangles[searchtri.id].infected = true
+                            searchtri.infected = true
                             m.viri.append(searchtri.triangle)
                         }
                     }
@@ -2640,12 +2895,12 @@ public class Triangulator {
         //        }
     }
 
-    private func infecthull(m: Mesh, b: Behavior) {
+    private static func infecthull(m: Mesh, b: Behavior) {
         if b.verbose {
             print("  Marking concavities (external triangles) for elimination.")
         }
         /* Find a triangle handle on the hull. */
-        var hulltri = OrientedTriangle(triangle: m.dummytri, orientation: 0)
+        let hulltri = OrientedTriangle(triangle: m.dummytri, orient: 0)
         hulltri.symself()
 
         /* Remember where we started so we know when to stop. */
@@ -2654,13 +2909,13 @@ public class Triangulator {
         /* Go once counterclockwise around the convex hull. */
         repeat {
             /* Ignore triangles that are already infected. */
-            if !m.triangles[hulltri.id].infected {
+            if !hulltri.infected {
                 /* Is the triangle protected by a subsegment? */
-                var hullsubseg = hulltri.tspivot()
+                let hullsubseg = hulltri.tspivot()
                 if hullsubseg.subsegment === m.dummysub {
                     /* The triangle is not protected; infect it. */
-                    if !m.triangles[hulltri.id].infected {
-                        m.triangles[hulltri.id].infected = true
+                    if !hulltri.infected {
+                        hulltri.infected = true
                         m.viri.append(hulltri.triangle)
                     }
                 } else {
@@ -2669,11 +2924,11 @@ public class Triangulator {
                         hullsubseg.mark = 1
                         let horg = hulltri.org
                         let hdest = hulltri.dest
-                        if horg >= 0 && m.vertices[horg].mark == 0 {
-                            m.vertices[horg].mark = 1
+                        if horg?.mark == 0 {
+                            horg?.mark = 1
                         }
-                        if hdest >= 0 && m.vertices[hdest].mark == 0 {
-                            m.vertices[hdest].mark = 1
+                        if hdest?.mark == 0 {
+                            hdest?.mark = 1
                         }
                     }
                 }
@@ -2681,11 +2936,11 @@ public class Triangulator {
             /* To find the next hull edge, go clockwise around the next vertex. */
 
             hulltri.lnextself()
-            var nexttri = hulltri.oprev()
+            let nexttri = hulltri.oprev()
             while nexttri.triangle !== m.dummytri {
 
-                nexttri.copy(to: &hulltri)
-                hulltri.oprev(to: &nexttri)
+                nexttri.copy(to: hulltri)
+                hulltri.oprev(to: nexttri)
             }
         } while !hulltri.otriEquals(other: starttri)
     }
@@ -2707,38 +2962,38 @@ public class Triangulator {
     /*                                                                           */
     /*****************************************************************************/
 
-    private func plague(m: Mesh, b: Behavior) {
+    private static func plague(m: Mesh, b: Behavior) {
         if b.verbose {
             print("  Marking neighbors of marked triangles.\n")
         }
         var tovisit = m.viri
         while !tovisit.isEmpty {
             let virusloop = tovisit.removeFirst()
-            var testtri = OrientedTriangle(triangle: virusloop, orientation: 0)
+            let testtri = OrientedTriangle(triangle: virusloop, orient: 0)
             /* A triangle is marked as infected by messing with one of its pointers */
             /*   to subsegments, setting it to an illegal value.  Hence, we have to */
             /*   temporarily uninfect this triangle so that we can examine its      */
             /*   adjacent subsegments.                                              */
-            m.triangles[testtri.id].infected = false
+            testtri.infected = false
 
             if b.verbose {
                 /* Assign the triangle an orientation for convenience in */
                 /*   checking its vertices.                              */
-                testtri.orientation = 0
-                let deadorg = m.vertices[testtri.org]
-                let deaddest = m.vertices[testtri.dest]
-                let deadapex = m.vertices[testtri.apex]
+                testtri.orient = 0
+                let deadorg = testtri.org!
+                let deaddest = testtri.dest!
+                let deadapex = testtri.apex!
                 print("    Checking (\(deadorg.x). \(deadorg.y)) (\(deaddest.x),\(deaddest.y)) (\(deadapex.x) \(deadapex.y))")
             }
             /* Check each of the triangle's three neighbors. */
             for i in 0..<3 {
-                testtri.orientation = i
+                testtri.orient = i
                 /* Find the neighbor. */
                 let neighbor = testtri.sym()
                 /* Check for a subsegment between the triangle and its neighbor. */
-                var neighborsubseg = testtri.tspivot()
+                let neighborsubseg = testtri.tspivot()
                 /* Check if the neighbor is nonexistent or already infected. */
-                if neighbor.triangle === m.dummytri || m.triangles[neighbor.id].infected {
+                if neighbor.triangle === m.dummytri || neighbor.infected {
                     if neighborsubseg.subsegment !== m.dummysub {
                         /* There is a subsegment separating the triangle from its      */
                         /*   neighbor, but both triangles are dying, so the subsegment */
@@ -2755,13 +3010,13 @@ public class Triangulator {
                         /* There is no subsegment protecting the neighbor, so */
                         /*   the neighbor becomes infected.                   */
                         if b.verbose {
-                            let deadorg = m.vertices[neighbor.org]
-                            let deaddest = m.vertices[neighbor.dest]
-                            let deadapex = m.vertices[neighbor.apex]
+                            let deadorg = neighbor.org!
+                            let deaddest = neighbor.dest!
+                            let deadapex = neighbor.apex!
                             print("    Marking (\(deadorg.x). \(deadorg.y)) (\(deaddest.x),\(deaddest.y)) (\(deadapex.x) \(deadapex.y))")
 
                         }
-                        m.triangles[neighbor.id].infected = true
+                        neighbor.infected = true
                         /* Ensure that the neighbor's neighbors will be infected. */
                         m.viri.append(neighbor.triangle)
                         tovisit.append(neighbor.triangle)
@@ -2773,18 +3028,18 @@ public class Triangulator {
                             neighborsubseg.mark = 1
                         }
 
-                        if neighbor.org >= 0 && m.vertices[neighbor.org].mark == 0 {
-                            m.vertices[neighbor.org].mark = 1
+                        if let norg = neighbor.org, norg.mark == 0 {
+                            norg.mark = 1
                         }
-                        if neighbor.dest >= 0 && m.vertices[neighbor.dest].mark == 0 {
-                            m.vertices[neighbor.dest].mark = 1
+                        if let ndest = neighbor.dest, ndest.mark == 0 {
+                            ndest.mark = 1
                         }
                     }
                 }
             }
             /* Remark the triangle as infected, so it doesn't get added to the */
             /*   virus pool again.                                             */
-            m.triangles[testtri.id].infected = true
+            testtri.infected = true
         }
 
         if b.verbose {
@@ -2794,27 +3049,26 @@ public class Triangulator {
         tovisit = m.viri
         while !tovisit.isEmpty {
             let virusloop = tovisit.removeFirst()
-            var testtri = OrientedTriangle(triangle: virusloop, orientation: 0)
+            let testtri = OrientedTriangle(triangle: virusloop, orient: 0)
 
             /* Check each of the three corners of the triangle for elimination. */
             /*   This is done by walking around each vertex, checking if it is  */
             /*   still connected to at least one live triangle.                 */
             for i in 0..<3 {
-                testtri.orientation = i
+                testtri.orient = i
 
                 /* Check if the vertex has already been tested. */
-                if testtri.org >= 0 {
-                    let testvertex = testtri.org
+                if let testvertex = testtri.org {
                     var killorg = true
                     /* Mark the corner of the triangle as having been tested. */
-                    testtri.org = -1
+                    testtri.org = nil
                     /* Walk counterclockwise about the vertex. */
-                    var neighbor = testtri.onext()
+                    let neighbor = testtri.onext()
                     /* Stop upon reaching a boundary or the starting triangle. */
                     while neighbor.triangle !== m.dummytri && !neighbor.otriEquals(other: testtri) {
-                        if m.triangles[neighbor.id].infected {
+                        if neighbor.infected {
                             /* Mark the corner of this triangle as having been tested. */
-                            neighbor.org = -1
+                            neighbor.org = nil
                         } else {
                             /* A live triangle.  The vertex survives. */
                             killorg = false
@@ -2825,12 +3079,12 @@ public class Triangulator {
                     /* If we reached a boundary, we must walk clockwise as well. */
                     if neighbor.triangle === m.dummytri {
                         /* Walk clockwise about the vertex. */
-                        var neighbor = testtri.oprev()
+                        let neighbor = testtri.oprev()
                         /* Stop upon reaching a boundary. */
                         while neighbor.triangle !== m.dummytri {
-                            if m.triangles[neighbor.id].infected {
+                            if neighbor.infected {
                                 /* Mark the corner of this triangle as having been tested. */
-                                neighbor.org = -1
+                                neighbor.org = nil
                             } else {
                                 /* A live triangle.  The vertex survives. */
                                 killorg = false
@@ -2841,11 +3095,10 @@ public class Triangulator {
                     }
                     if killorg {
                         if b.verbose {
-                            let dlVert = m.vertices[testvertex]
-                            print("    Deleting vertex (\(dlVert.x), \(dlVert.y))")
+                            print("    Deleting vertex (\(testvertex.x), \(testvertex.y))")
 
                         }
-                        m.vertices[testvertex].state = .undead
+                        testvertex.state = .undead
                         m.undeads += 1
                     }
                 }
@@ -2854,7 +3107,7 @@ public class Triangulator {
             /* Record changes in the number of boundary edges, and disconnect */
             /*   dead triangles from their neighbors.                         */
             for i in 0..<3 {
-                testtri.orientation = i
+                testtri.orient = i
                 let neighbor = testtri.sym()
                 if neighbor.triangle === m.dummytri {
                     /* There is no neighboring triangle on this edge, so this edge    */
@@ -2872,7 +3125,6 @@ public class Triangulator {
             /* Return the dead triangle to the pool of triangles. */
             m.killTriangle(triangle: testtri.triangle)
         }
-        m.removeAllDeadTriangles()
         m.viri.removeAll(keepingCapacity: false)
     }
 }

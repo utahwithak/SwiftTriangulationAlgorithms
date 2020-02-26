@@ -8,20 +8,34 @@
 
 import Foundation
 
-struct OrientedTriangle {
-    var triangle: Triangle
-    var orientation: Int
+class OrientedTriangle {
 
-    var id: Int {
-        return triangle.id
-    }
-
-    init(triangle: Triangle, orientation: Int) {
+    init(triangle: Triangle, orient: Int) {
         self.triangle = triangle
-        self.orientation = orientation
+        self.orient = orient
     }
 
-    private func vertex(at: Int) -> Int {
+    init(encoded: Triangle.EncodedTriangle) {
+        self.triangle = encoded.triangle
+        self.orient = encoded.orientation
+    }
+
+    var triangle: Triangle
+    var orient: Int
+
+    var infected: Bool {
+        get {
+            return triangle.infected
+        }
+        set {
+            triangle.infected = newValue
+        }
+    }
+    var encodedTriangle: Triangle.EncodedTriangle {
+        return Triangle.EncodedTriangle(triangle: triangle, orientation: orient)
+    }
+
+    func vertex(at: Int) -> Vertex! {
         switch at {
         case 0:
             return triangle.v1
@@ -33,7 +47,7 @@ struct OrientedTriangle {
 
     }
 
-    mutating func set(vertex: Int, at: Int) {
+    func set(vertex: Vertex?, at: Int) {
         switch at {
         case 0:
             triangle.v1 = vertex
@@ -44,92 +58,115 @@ struct OrientedTriangle {
         }
     }
 
-    var org: Int {
-        get { vertex(at: plus1mod3[orientation])}
-        set { set(vertex: newValue, at: plus1mod3[orientation]) }
+    var org: Vertex? {
+        get { vertex(at: plus1mod3[orient])}
+        set {
+            if let org = newValue {
+
+                print("setting org:\t\(org.x) \(org.y)")
+            } else {
+                print("clearing org")
+            }
+
+            set(vertex: newValue, at: plus1mod3[orient]) }
     }
 
-    var dest: Int {
-        get { vertex(at: minus1mod3[orientation]) }
-        set { set(vertex: newValue, at: minus1mod3[orientation])}
+    var dest: Vertex? {
+        get { vertex(at: minus1mod3[orient]) }
+        set {
+            if let dest = newValue {
+                print("setting dest:\t\(dest.x) \(dest.y)")
+            } else {
+                print("Clearing dest")
+            }
+            set(vertex: newValue, at: minus1mod3[orient])}
     }
 
-    var apex: Int {
-        get { vertex(at: orientation) }
-        set { set(vertex: newValue, at: orientation) }
+    var apex: Vertex! {
+        get { vertex(at: orient) }
+        set {
+            if let apex = newValue {
+                print("setting apex:\t \(apex.x) \(apex.y)")
+            } else {
+                print("clearing apex")
+            }
+
+            set(vertex: newValue, at: orient) }
     }
 
-    func copy(to otri2: inout OrientedTriangle) {
+    func copy(to otri2: OrientedTriangle) {
         otri2.triangle = triangle
-        otri2.orientation = orientation
+        otri2.orient = orient
     }
 
     func copy() -> OrientedTriangle {
-        return OrientedTriangle(triangle: triangle, orientation: orientation)
+        return OrientedTriangle(triangle: triangle, orient: orient)
     }
 
     func otriEquals(other otri2: OrientedTriangle) -> Bool {
-        return triangle === otri2.triangle && orientation == otri2.orientation
+        return triangle === otri2.triangle && orient == otri2.orient
     }
 
     func bond(to otri2: OrientedTriangle) {
-        switch orientation {
+        let tri1Encoded = encodedTriangle
+        let tri2Encoded = otri2.encodedTriangle
+        switch orient {
         case 0:
-            triangle.t1 = otri2
+            triangle.t1 = tri2Encoded
         case 1:
-            triangle.t2 = otri2
+            triangle.t2 = tri2Encoded
         default:
-            triangle.t3 = otri2
+            triangle.t3 = tri2Encoded
         }
 
-        switch otri2.orientation {
+        switch otri2.orient {
         case 0:
-            otri2.triangle.t1 = self
+            otri2.triangle.t1 = tri1Encoded
         case 1:
-            otri2.triangle.t2 = self
+            otri2.triangle.t2 = tri1Encoded
         default:
-            otri2.triangle.t3 = self
+            otri2.triangle.t3 = tri1Encoded
         }
     }
 
-    mutating func lprevself() {
-        orientation = minus1mod3[orientation]
+    func lprevself() {
+        orient = minus1mod3[orient]
     }
 
-    mutating func lnextself() {
-        orientation = plus1mod3[orientation]
+    func lnextself() {
+        orient = plus1mod3[orient]
     }
 
-    func lprev(on otri2: inout OrientedTriangle) {
+    func lprev(on otri2: OrientedTriangle) {
         otri2.triangle = triangle
-        otri2.orientation = minus1mod3[orientation]
+        otri2.orient = minus1mod3[orient]
     }
 
     func lprev() -> OrientedTriangle {
-        return OrientedTriangle(triangle: triangle, orientation: minus1mod3[orientation])
+        return OrientedTriangle(triangle: triangle, orient: minus1mod3[orient])
     }
 
-    func lnext(on otri2: inout OrientedTriangle) {
+    func lnext(on otri2: OrientedTriangle) {
         otri2.triangle = triangle
-        otri2.orientation = plus1mod3[orientation]
+        otri2.orient = plus1mod3[orient]
     }
     func lnext() -> OrientedTriangle {
-        return OrientedTriangle(triangle: triangle, orientation: plus1mod3[orientation])
+        return OrientedTriangle(triangle: triangle, orient: plus1mod3[orient])
     }
 
     func onext() -> OrientedTriangle {
-        var prev = lprev()
+        let prev = lprev()
         prev.symself()
         return prev
     }
-    mutating func onextself() {
+    func onextself() {
         lprevself()
         symself()
     }
 
     func tspivot() -> OrientedSubsegment {
-        let sptr: EncodedSubsegment
-        switch orientation {
+        let sptr: Triangle.EncodedSubsegment
+        switch orient {
         case 0:
             sptr = triangle.s1
         case 1:
@@ -142,48 +179,46 @@ struct OrientedTriangle {
     }
 
     func oprev() -> OrientedTriangle {
-        var otri2 = sym()
+        let otri2 = sym()
         otri2.lnextself()
         return otri2
     }
 
-    func oprev(to otri2: inout OrientedTriangle) {
-        sym(to: &otri2)
+    func oprev(to otri2: OrientedTriangle) {
+        sym(to: otri2)
         otri2.lnextself()
     }
-
-    mutating func oprevself() {
+    func oprevself() {
         symself()
         lnextself()
     }
-
-    mutating func dnextself() {
+    func dnextself() {
         symself()
         lprevself()
     }
 
     func tsbond(to osub: OrientedSubsegment) {
-
-        switch orientation {
+        let encoded = osub.encodedSubsegment
+        switch orient {
         case 0:
-            triangle.s1 = osub.encodedSubsegment
+            triangle.s1 = encoded
         case 1:
-            triangle.s2 = osub.encodedSubsegment
+            triangle.s2 = encoded
         default:
-            triangle.s3 = osub.encodedSubsegment
+            triangle.s3 = encoded
         }
         switch osub.orient {
         case 0:
-            osub.subsegment.t1 = self
+            osub.subsegment.t1 = encodedTriangle
         default:
-            osub.subsegment.t2 = self
+            osub.subsegment.t2 = encodedTriangle
 
         }
     }
 
-    mutating func symself() {
-        let ptr: OrientedTriangle
-        switch orientation {
+    func symself() {
+        let ptr: Triangle.EncodedTriangle
+        switch orient {
         case 0:
             ptr = triangle.t1
         case 1:
@@ -192,15 +227,15 @@ struct OrientedTriangle {
             ptr = triangle.t3
         }
         triangle = ptr.triangle
-        orientation = ptr.orientation
+        orient = ptr.orientation
     }
     /* sym() finds the abutting triangle, on the same edge.  Note that the edge  */
     /*   direction is necessarily reversed, because the handle specified by an   */
     /*   oriented triangle is directed counterclockwise around the triangle.     */
 
-    func sym(to otri2: inout OrientedTriangle) {
-        let ptr: OrientedTriangle
-        switch orientation {
+    func sym(to otri2: OrientedTriangle) {
+        let ptr: Triangle.EncodedTriangle
+        switch orient {
         case 0:
             ptr = triangle.t1
         case 1:
@@ -212,36 +247,37 @@ struct OrientedTriangle {
     }
 
     func sym() -> OrientedTriangle {
-        switch orientation {
+        let ptr: Triangle.EncodedTriangle
+        switch orient {
         case 0:
-            return triangle.t1
+            ptr = triangle.t1
         case 1:
-            return triangle.t2
+            ptr = triangle.t2
         default:
-            return triangle.t3
+            ptr = triangle.t3
         }
-
+        return OrientedTriangle(triangle: ptr.triangle, orient: ptr.orientation)
     }
 
-    mutating func decode(triangle: OrientedTriangle) {
+    func decode(triangle: Triangle.EncodedTriangle) {
         self.triangle = triangle.triangle
-        orientation = triangle.orientation
+        orient = triangle.orientation
     }
 
     func disolve(m: Mesh) {
-        switch orientation {
+        switch orient {
         case 0:
-            triangle.t1 = OrientedTriangle(triangle: m.dummytri, orientation: 0)
+            triangle.t1 = Triangle.EncodedTriangle(triangle: m.dummytri, orientation: 0)
         case 1:
-            triangle.t2 = OrientedTriangle(triangle: m.dummytri, orientation: 0)
+            triangle.t2 = Triangle.EncodedTriangle(triangle: m.dummytri, orientation: 0)
         default:
-            triangle.t3 = OrientedTriangle(triangle: m.dummytri, orientation: 0)
+            triangle.t3 = Triangle.EncodedTriangle(triangle: m.dummytri, orientation: 0)
         }
     }
 
     func tsdissolve(m: Mesh) {
-        let encoded = EncodedSubsegment(ss: m.dummysub, orientation: 0)
-        switch orientation {
+        let encoded = Triangle.EncodedSubsegment(ss: m.dummysub, orientation: 0)
+        switch orient {
         case 0:
             triangle.s1 = encoded
         case 1:

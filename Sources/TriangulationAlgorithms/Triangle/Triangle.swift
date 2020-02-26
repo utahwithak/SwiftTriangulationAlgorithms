@@ -8,29 +8,30 @@
 
 import Foundation
 
-struct EncodedSubsegment {
-    let ss: Subsegment
-    let orientation: Int
-}
-
 class Triangle {
-    let id: Int
-    var t1: OrientedTriangle!, t2: OrientedTriangle!, t3: OrientedTriangle!
-    var v1 = -1, v2 = -1, v3 = -1
+    struct EncodedTriangle {
+        let triangle: Triangle
+        let orientation: Int
+    }
+
+    struct EncodedSubsegment {
+        let ss: Subsegment
+        let orientation: Int
+    }
+
+    var t1: EncodedTriangle!, t2: EncodedTriangle!, t3: EncodedTriangle!
+    var v1: Vertex?, v2: Vertex?, v3: Vertex?
 
     var s1: EncodedSubsegment!, s2: EncodedSubsegment!, s3: EncodedSubsegment!
 
     var infected = false
 
-    init(id: Int) {
-        self.id = id
+    init() {
     }
-
-    init(id: Int, adjoining: Triangle, subsegment: Subsegment?) {
-        self.id = id
-        t1 = OrientedTriangle(triangle: adjoining, orientation: 0)
-        t2 = OrientedTriangle(triangle: adjoining, orientation: 0)
-        t3 = OrientedTriangle(triangle: adjoining, orientation: 0)
+    init(adjoining: Triangle, subsegment: Subsegment?) {
+        t1 = EncodedTriangle(triangle: adjoining, orientation: 0)
+        t2 = EncodedTriangle(triangle: adjoining, orientation: 0)
+        t3 = EncodedTriangle(triangle: adjoining, orientation: 0)
         if let subsegment = subsegment {
             s1 = EncodedSubsegment(ss: subsegment, orientation: 0)
             s2 = EncodedSubsegment(ss: subsegment, orientation: 0)
@@ -39,6 +40,11 @@ class Triangle {
 
     }
 
+    var attributes = [REAL]()
+    var area: REAL = 0
+    var nodes = [Vertex]()
+    var nextTri0: Triangle?, nextTri1: Triangle?, nextTri2: Triangle?
+
     var isDead: Bool {
         return t2 == nil
     }
@@ -46,12 +52,15 @@ class Triangle {
     func killTriangle() {
         t1 = nil
         t2 = nil
-        v1 = -1
-        v2 = -1
-        v3 = -1
+        v1 = nil
+        v2 = nil
+        v3 = nil
         s1 = nil
         s2 = nil
         s3 = nil
+        nextTri0 = nil
+        nextTri1 = nil
+        nextTri2 = nil
     }
 
 }
