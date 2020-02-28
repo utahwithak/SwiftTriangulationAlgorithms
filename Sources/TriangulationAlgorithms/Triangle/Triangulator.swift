@@ -13,26 +13,27 @@ typealias REAL = CGFloat
 let plus1mod3 = [1, 2, 0]
 let minus1mod3 = [2, 0, 1]
 
-public class Triangulator {
+public struct Triangulator {
 
-    private static let SAMPLEFACTOR = 11
-    static var generator = Xoshiro(seed: (0, 142, 4325, 524214))
-    private static func randomnation( choices: Int) -> Int {
-        return Int.random(in: 0..<choices, using: &generator)
-    }
+    var generator = Xoshiro(seed: (0, 142, 4325, 524214))
 
-    private static var predicates = Predicates()
+    private let predicates: Predicates
 
-    public static func triangulate(b: Behavior, inArgs: TriangulateIO) -> TriangulateIO {
-        let mesh = Mesh()
+    var b: Behavior
+    let mesh = Mesh()
 
-        var out = inArgs
-
+    public init(b: Behavior) {
         predicates = Predicates(exact: !b.noexact)
 
+        self.b = b
+    }
+
+    public mutating func triangulate(inArgs: TriangulateIO) -> TriangulateIO {
+
+        var out = inArgs
         mesh.steinerleft = b.steiner
 
-        transferNodes(mesh: mesh, behavior: b, pointlist: inArgs.pointlist, attributes: [], markerList: inArgs.pointmarkerlist, numberofpointattribs: inArgs.numberOfPointAttributes)
+        transferNodes(mesh: mesh, pointlist: inArgs.pointlist, attributes: [], markerList: inArgs.pointmarkerlist, numberofpointattribs: inArgs.numberOfPointAttributes)
 
         if b.refine {
             print("TODO")
@@ -163,7 +164,7 @@ public class Triangulator {
     /*  after the vertices are written to a file.                                */
     /*                                                                           */
     /*****************************************************************************/
-    private static func writenodes(m: Mesh, b: Behavior, pointlist: inout [Vector2], pointmarkerlist: inout [Int]) {
+    private func writenodes(m: Mesh, b: Behavior, pointlist: inout [Vector2], pointmarkerlist: inout [Int]) {
 
         if !b.quiet {
             print("Writing vertices.")
@@ -195,7 +196,7 @@ public class Triangulator {
     /*  writeelements()   Write the triangles to an .ele file.                   */
     /*                                                                           */
     /*****************************************************************************/
-    private static func writeelements(m: Mesh, b: Behavior, trianglelist: inout [Int]) {
+    private func writeelements(m: Mesh, b: Behavior, trianglelist: inout [Int]) {
         if !b.quiet {
             print("Writing triangles.")
         }
@@ -220,7 +221,7 @@ public class Triangulator {
         let y: CGFloat
     }
 
-    private static func transferNodes(mesh m: Mesh, behavior b: Behavior, pointlist: [Vector2], attributes: [REAL], markerList: [Int], numberofpointattribs: Int) {
+    private mutating func transferNodes(mesh m: Mesh, pointlist: [Vector2], attributes: [REAL], markerList: [Int], numberofpointattribs: Int) {
 
         m.invertices = pointlist.count
         m.mesh_dim = 2
@@ -233,10 +234,9 @@ public class Triangulator {
             print("  Sorting vertices.")
         }
 
-        var generator = Xoshiro(seed: (0, 142, 4325, 524214))
-        //        if m.nextras == 0 {
-        //            b.weighted = false
-        //        }
+        if m.nextras == 0 {
+            b.weighted = false
+        }
 
         m.vertices = pointlist.enumerated().map({SortVec(id: $0.offset, x: $0.element.x, y: $0.element.y) }).sorted(by: {  lhs, rhs in
             if lhs.x < rhs.x {
@@ -306,7 +306,7 @@ public class Triangulator {
         //         }
     }
 
-    private static func delaunay(m: Mesh, b: Behavior) -> Int {
+    private func delaunay(m: Mesh, b: Behavior) -> Int {
         var hulledges = 0
 
         m.eextras = 0
@@ -325,7 +325,7 @@ public class Triangulator {
         }
     }
 
-    private static func initalizeDummies(mesh m: Mesh, b: Behavior) {
+    private func initalizeDummies(mesh m: Mesh, b: Behavior) {
         let encoded = OrientedTriangle(triangle: m.dummytri, orient: 0)
         m.dummytri.t1 = encoded
         m.dummytri.t2 = encoded
@@ -351,7 +351,7 @@ public class Triangulator {
         }
     }
 
-    private static func divconqdelaunay(m: Mesh, b: Behavior) -> Int {
+    private func divconqdelaunay(m: Mesh, b: Behavior) -> Int {
 
         if b.verbose {
             print("  Sorting vertices.")
@@ -365,7 +365,7 @@ public class Triangulator {
         return removeghosts(m: m, b: b, startghost: hullleft)
     }
 
-    static func removeghosts(m: Mesh, b: Behavior, startghost: OrientedTriangle) -> Int {
+    func removeghosts(m: Mesh, b: Behavior, startghost: OrientedTriangle) -> Int {
 
         if b.verbose {
             print("  Removing ghost triangles.")
@@ -406,81 +406,7 @@ public class Triangulator {
         return hullsize
     }
 
-    private static func alternateAxes(on sortarray: inout ArraySlice<Vertex>, arraysize: Int, axis axisIn: Int) {
-        var divider = 0
-        var axis = axisIn
-        divider = arraysize >> 1
-        if arraysize <= 3 {
-            /* Recursive base case:  subsets of two or three vertices will be    */
-            /*   handled specially, and should always be sorted by x-coordinate. */
-            axis = 0
-        }
-        /* Partition with a horizontal or vertical cut. */
-        vertexmedian(sortarray: &sortarray, arraysize: arraysize, median: divider, axis: axis)
-        /* Recursively partition the subsets with a cross cut. */
-        if arraysize - divider >= 2 {
-            if divider >= 2 {
-                alternateAxes(on: &sortarray, arraysize: divider, axis: 1 - axis)
-            }
-            alternateAxes(on: &sortarray[(sortarray.startIndex + divider)...], arraysize: arraysize - divider, axis: 1 - axis)
-        }
-    }
-
-    private static func vertexmedian(sortarray: inout ArraySlice<Vertex>, arraysize: Int, median: Int, axis: Int) {
-
-        let start = sortarray.startIndex
-        if sortarray.count == 2 {
-            /* Recursive base case. */
-            if (sortarray[start].realAt(axis: axis) > sortarray[start + 1].realAt(axis: axis)) ||
-                ((sortarray[start].realAt(axis: axis) == sortarray[start + 1].realAt(axis: axis)) &&
-                    (sortarray[start].realAt(axis: 1 - axis) > sortarray[start + 1].realAt(axis: 1 - axis))) {
-                let temp = sortarray[start + 1]
-                sortarray[start + 1] = sortarray[start]
-                sortarray[start] = temp
-            }
-            return
-        }
-        /* Choose a random pivot to split the array. */
-        let pivot = randomnation(choices: arraysize)
-        let pivot1 = sortarray[start + pivot].realAt(axis: axis)
-        let pivot2 = sortarray[start + pivot].realAt(axis: 1 - axis)
-        /* Split the array. */
-        var left = -1
-        var right = arraysize
-        while left < right {
-            /* Search for a vertex whose x-coordinate is too large for the left. */
-            repeat {
-                left += 1
-            } while ((left <= right) && ((sortarray[start + left].realAt(axis: axis) < pivot1) ||
-                ((sortarray[start + left].realAt(axis: axis) == pivot1) &&
-                    (sortarray[start + left].realAt(axis: 1 - axis) < pivot2))))
-            /* Search for a vertex whose x-coordinate is too small for the right. */
-            repeat {
-                right -= 1
-            } while ((left <= right) && ((sortarray[start + right].realAt(axis: axis) > pivot1) ||
-                ((sortarray[start + right].realAt(axis: axis) == pivot1) &&
-                    (sortarray[start + right].realAt(axis: 1 - axis) > pivot2))))
-            if left < right {
-                /* Swap the left and right vertices. */
-                let temp = sortarray[start + left]
-                sortarray[start + left] = sortarray[start + right]
-                sortarray[start + right] = temp
-            }
-        }
-        /* Unlike in vertexsort(), at most one of the following */
-        /*   conditionals is true.                             */
-        if left > median {
-            /* Recursively shuffle the left subset. */
-            vertexmedian(sortarray: &sortarray, arraysize: left, median: median, axis: axis)
-        }
-        if right < median - 1 {
-            /* Recursively shuffle the right subset. */
-            vertexmedian(sortarray: &sortarray[(start + (right + 1))...], arraysize: arraysize - right - 1,
-                         median: median - right - 1, axis: axis)
-        }
-    }
-
-    private static func divconqrecurse(m: Mesh, b: Behavior, sortarray: ArraySlice<Vertex>, vertices: Int, axis: Int, farleft: inout OrientedTriangle, farright: inout OrientedTriangle) {
+    private func divconqrecurse(m: Mesh, b: Behavior, sortarray: ArraySlice<Vertex>, vertices: Int, axis: Int, farleft: inout OrientedTriangle, farright: inout OrientedTriangle) {
         if b.verbose {
             print("  Triangulating \(vertices) vertices.")
         }
@@ -634,9 +560,7 @@ public class Triangulator {
         }
     }
 
-    private static func mergehulls(m: Mesh, b: Behavior, farleft: inout OrientedTriangle,
-                                   innerleft: inout OrientedTriangle, innerright: inout OrientedTriangle,
-                                   farright: inout OrientedTriangle, axis: Int) {
+    private func mergehulls(m: Mesh, b: Behavior, farleft: inout OrientedTriangle, innerleft: inout OrientedTriangle, innerright: inout OrientedTriangle, farright: inout OrientedTriangle, axis: Int) {
 
         var innerleftdest = innerleft.dest
         var innerleftapex = innerleft.apex
@@ -912,7 +836,7 @@ public class Triangulator {
         }
     }
 
-    private static func printtriangle(m: Mesh, b: Behavior, t: OrientedTriangle) {
+    private func printtriangle(m: Mesh, b: Behavior, t: OrientedTriangle) {
 
         print("triangle \(t.triangle) with orientation \(t.orientation):")
         var printtri = t.triangle.t1!
@@ -972,7 +896,7 @@ public class Triangulator {
         }
     }
 
-    private static func formskeleton(m: Mesh, b: Behavior, segmentlist: [Int], segmentmarkerlist: [Int]) {
+    private func formskeleton(m: Mesh, b: Behavior, segmentlist: [Int], segmentmarkerlist: [Int]) {
 
         if b.poly {
             if !b.quiet {
@@ -1042,7 +966,7 @@ public class Triangulator {
         }
     }
 
-    private static func markhull(m: Mesh, b: Behavior) {
+    private func markhull(m: Mesh, b: Behavior) {
 
         /* Find a triangle handle on the hull. */
         var hulltri = OrientedTriangle(triangle: m.dummytri, orient: 0)
@@ -1064,7 +988,7 @@ public class Triangulator {
         } while (!hulltri.otriEquals(other: starttri))
     }
 
-    private static func makevertexmap(m: Mesh, b: Behavior) {
+    private func makevertexmap(m: Mesh, b: Behavior) {
 
         if b.verbose {
             print("    Constructing mapping from vertices to triangles.")
@@ -1078,7 +1002,7 @@ public class Triangulator {
             }
         }
     }
-    private static func insertsegment(m: Mesh, b: Behavior, endpoint1 ep1: Vertex, endpoint2 ep2: Vertex, newmark: Int) {
+    private func insertsegment(m: Mesh, b: Behavior, endpoint1 ep1: Vertex, endpoint2 ep2: Vertex, newmark: Int) {
         var endpoint1 = ep1
         var endpoint2 = ep2
         if b.verbose {
@@ -1153,7 +1077,7 @@ public class Triangulator {
         constrainededge(m: m, b: b, starttri: searchtri1, endpoint2: endpoint2, newmark: newmark)
     }
 
-    private static func constrainededge(m: Mesh, b: Behavior, starttri: OrientedTriangle, endpoint2: Vertex, newmark: Int) {
+    private func constrainededge(m: Mesh, b: Behavior, starttri: OrientedTriangle, endpoint2: Vertex, newmark: Int) {
 
         let endpoint1 = starttri.org!
         var fixuptri = starttri.lnext
@@ -1228,7 +1152,7 @@ public class Triangulator {
         }
     }
 
-    private static func flip(m: Mesh, b: Behavior, flipedge: inout OrientedTriangle) {
+    private func flip(m: Mesh, b: Behavior, flipedge: inout OrientedTriangle) {
 
         /* Identify the vertices of the quadrilateral. */
         let rightvertex = flipedge.org
@@ -1314,7 +1238,7 @@ public class Triangulator {
         }
     }
 
-    private static func delaunayfixup(m: Mesh, b: Behavior, fixuptri: inout OrientedTriangle, leftside: Bool) {
+    private func delaunayfixup(m: Mesh, b: Behavior, fixuptri: inout OrientedTriangle, leftside: Bool) {
 
         var neartri = fixuptri.lnext
         var fartri = neartri.sym()
@@ -1375,7 +1299,7 @@ public class Triangulator {
 
     }
 
-    private static func locate(m: Mesh, b: Behavior, searchpoint: Vertex, searchtri: inout OrientedTriangle) -> LocateResult {
+    private func locate(m: Mesh, b: Behavior, searchpoint: Vertex, searchtri: inout OrientedTriangle) -> LocateResult {
 
         if b.verbose {
             print("  Randomly sampling for a triangle near point (\(searchpoint.x), \(searchpoint.y)).")
@@ -1451,7 +1375,7 @@ public class Triangulator {
         return preciselocate(m: m, b: b, searchpoint: searchpoint, searchtri: &searchtri, stopatsubsegment: false)
     }
 
-    private static func preciselocate(m: Mesh, b: Behavior, searchpoint: Vertex, searchtri: inout OrientedTriangle, stopatsubsegment: Bool) -> LocateResult {
+    private func preciselocate(m: Mesh, b: Behavior, searchpoint: Vertex, searchtri: inout OrientedTriangle, stopatsubsegment: Bool) -> LocateResult {
 
         if b.verbose {
             print("  Searching for point ( \(searchpoint.x), \(searchpoint.y)).")
@@ -1539,7 +1463,7 @@ public class Triangulator {
         }
     }
 
-    private static func scoutsegment(m: Mesh, b: Behavior, searchtri: inout OrientedTriangle, endpoint2: Vertex, newmark: Int) -> Bool {
+    private func scoutsegment(m: Mesh, b: Behavior, searchtri: inout OrientedTriangle, endpoint2: Vertex, newmark: Int) -> Bool {
 
         let collinear = finddirection(m: m, b: b, searchtri: &searchtri, searchpoint: endpoint2)
         let rightvertex = searchtri.dest!
@@ -1584,7 +1508,7 @@ public class Triangulator {
         }
     }
 
-    private static func segmentintersection(m: Mesh, b: Behavior, splittri: inout OrientedTriangle, splitsubseg: OrientedSubsegment, endpoint2: Vertex) {
+    private func segmentintersection(m: Mesh, b: Behavior, splittri: inout OrientedTriangle, splitsubseg: OrientedSubsegment, endpoint2: Vertex) {
 
         /* Find the other three segment endpoints. */
         let endpoint1 = splittri.apex!
@@ -1676,7 +1600,7 @@ public class Triangulator {
         case rightCollinear
     }
 
-    private static func finddirection(m: Mesh, b: Behavior, searchtri: inout OrientedTriangle, searchpoint: Vertex) -> FindDirectionResult {
+    private func finddirection(m: Mesh, b: Behavior, searchtri: inout OrientedTriangle, searchpoint: Vertex) -> FindDirectionResult {
 
         let startvertex = searchtri.org!
         var rightvertex = searchtri.dest!
@@ -1732,7 +1656,7 @@ public class Triangulator {
         }
     }
 
-    private static func insertsubseg(m: Mesh, b: Behavior, tri: OrientedTriangle, subsegmark: Int) {
+    private func insertsubseg(m: Mesh, b: Behavior, tri: OrientedTriangle, subsegmark: Int) {
 
         let triorg = tri.org
         let tridest = tri.dest
@@ -1774,7 +1698,7 @@ public class Triangulator {
         }
     }
 
-    private static func printsubseg(m: Mesh, b: Behavior, s: OrientedSubsegment) {
+    private func printsubseg(m: Mesh, b: Behavior, s: OrientedSubsegment) {
         print("subsegment \(s.subsegment) with orientation \(s.orient) and mark \(s.subsegment.marker):")
 
         if let printsh = s.subsegment.adj1 {
@@ -1843,7 +1767,7 @@ public class Triangulator {
         case duplicate
     }
 
-    private static func insertvertex(m: Mesh, b: Behavior, newvertex: Vertex, searchtri: inout OrientedTriangle, splitseg: OrientedSubsegment?, segmentflaws: Bool, triflaws: Bool) -> InsertVertexResult {
+    private func insertvertex(m: Mesh, b: Behavior, newvertex: Vertex, searchtri: inout OrientedTriangle, splitseg: OrientedSubsegment?, segmentflaws: Bool, triflaws: Bool) -> InsertVertexResult {
 
         if b.verbose {
             print("  Inserting (\(newvertex.x), \(newvertex.y)).")
@@ -2350,7 +2274,7 @@ public class Triangulator {
         }
     }
 
-    private static func checkseg4encroach(m: Mesh, b: Behavior, testsubseg: OrientedSubsegment) -> Int {
+    private func checkseg4encroach(m: Mesh, b: Behavior, testsubseg: OrientedSubsegment) -> Int {
 
         let eorg = testsubseg.sorg!
         let edest = testsubseg.sdest!
@@ -2424,7 +2348,7 @@ public class Triangulator {
         return encroached
     }
 
-    private static func testtriangle(m: Mesh, b: Behavior, testtri: OrientedTriangle) {
+    private func testtriangle(m: Mesh, b: Behavior, testtri: OrientedTriangle) {
 
         let torg = testtri.org!
         let tdest = testtri.dest!
@@ -2569,7 +2493,7 @@ public class Triangulator {
         }
     }
 
-    private static func carveholes(m: Mesh, b: Behavior, holelist: [Vector2], regionlist: [REAL]) {
+    private func carveholes(m: Mesh, b: Behavior, holelist: [Vector2], regionlist: [REAL]) {
 
         if !(b.quiet || (b.noholes && b.convex)) {
             print("Removing unwanted triangles.")
@@ -2715,7 +2639,7 @@ public class Triangulator {
         //        }
     }
 
-    private static func infecthull(m: Mesh, b: Behavior) {
+    private func infecthull(m: Mesh, b: Behavior) {
         if b.verbose {
             print("  Marking concavities (external triangles) for elimination.")
         }
@@ -2782,7 +2706,7 @@ public class Triangulator {
     /*                                                                           */
     /*****************************************************************************/
 
-    private static func plague(m: Mesh, b: Behavior) {
+    private func plague(m: Mesh, b: Behavior) {
         if b.verbose {
             print("  Marking neighbors of marked triangles.\n")
         }
