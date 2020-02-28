@@ -23,7 +23,7 @@ class Vertex: Vector2 {
 
     var state: Vertex.State = .input
 
-    var triangle: Triangle.EncodedTriangle?
+    var triangle: OrientedTriangle?
     let id: Int
 
     init(id: Int, x: REAL, y: REAL, z: REAL) {

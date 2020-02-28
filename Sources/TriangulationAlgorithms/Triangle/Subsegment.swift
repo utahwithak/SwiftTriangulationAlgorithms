@@ -9,9 +9,9 @@
 import Foundation
 
 class Subsegment {
-    var adj1: Triangle.EncodedSubsegment?, adj2: Triangle.EncodedSubsegment?
+    var adj1: OrientedSubsegment?, adj2: OrientedSubsegment?
     var v1: Vertex?, v2: Vertex?, v3: Vertex?, v4: Vertex?
-    var t1: Triangle.EncodedTriangle?, t2: Triangle.EncodedTriangle?
+    var t1: OrientedTriangle?, t2: OrientedTriangle?
     var marker: Int = 0
     var segnum: Int = 0
 

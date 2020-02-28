@@ -23,34 +23,30 @@ class OrientedSubsegment {
         set { subsegment.marker = newValue }
     }
 
-    var encodedSubsegment: Triangle.EncodedSubsegment {
-        return Triangle.EncodedSubsegment(ss: subsegment, orientation: orient)
-    }
-
     func ssymself() {
         orient = 1 - orient
     }
 
     func snextself() {
         let sptr = orient == 0 ? subsegment.adj2 : subsegment.adj1
-        subsegment = sptr!.ss
-        orient = sptr!.orientation
+        subsegment = sptr!.subsegment
+        orient = sptr!.orient
     }
 
     func spivot() -> OrientedSubsegment {
-        let sptr: Triangle.EncodedSubsegment
+        let sptr: OrientedSubsegment
         switch orient {
         case 0:
             sptr = subsegment.adj1!
         default:
             sptr = subsegment.adj2!
         }
-        return OrientedSubsegment(subseg: sptr.ss, orient: sptr.orientation)
+        return sptr
     }
 
     func stpivot() -> OrientedTriangle {
         let ptr = orient == 0 ? subsegment.t1 : subsegment.t2
-        return OrientedTriangle(encoded: ptr!)
+        return ptr!
     }
 
     func ssym() -> OrientedSubsegment {
@@ -59,23 +55,23 @@ class OrientedSubsegment {
 
     func sdissolve(m: Mesh) {
         if orient == 0 {
-            subsegment.adj1 = Triangle.EncodedSubsegment(ss: m.dummysub, orientation: 0)
+            subsegment.adj1 = OrientedSubsegment(subseg: m.dummysub, orient: 0)
         } else {
-            subsegment.adj2 = Triangle.EncodedSubsegment(ss: m.dummysub, orientation: 0)
+            subsegment.adj2 = OrientedSubsegment(subseg: m.dummysub, orient: 0)
         }
     }
 
     func sbond(to osub2: OrientedSubsegment) {
         if orient == 0 {
-            subsegment.adj1 = osub2.encodedSubsegment
+            subsegment.adj1 = osub2
         } else {
-            subsegment.adj2 = osub2.encodedSubsegment
+            subsegment.adj2 = osub2
         }
 
         if osub2.orient == 0 {
-            osub2.subsegment.adj1 = encodedSubsegment
+            osub2.subsegment.adj1 = self
         } else {
-            osub2.subsegment.adj2 = encodedSubsegment
+            osub2.subsegment.adj2 = self
         }
     }
 
@@ -83,9 +79,9 @@ class OrientedSubsegment {
 
     func stdissolve(m: Mesh) {
         if orient == 0 {
-            subsegment.t1 = Triangle.EncodedTriangle(triangle: m.dummytri, orientation: 0)
+            subsegment.t1 = OrientedTriangle(triangle: m.dummytri, orient: 0)
         } else {
-            subsegment.t2 = Triangle.EncodedTriangle(triangle: m.dummytri, orientation: 0)
+            subsegment.t2 = OrientedTriangle(triangle: m.dummytri, orient: 0)
         }
     }
 

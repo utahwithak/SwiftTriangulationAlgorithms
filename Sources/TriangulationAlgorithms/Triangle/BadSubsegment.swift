@@ -9,12 +9,12 @@
 import Foundation
 
 class BadSubsegment {
-    init(seg: Triangle.EncodedSubsegment, org: Vertex, dest: Vertex) {
+    init(seg: OrientedSubsegment, org: Vertex, dest: Vertex) {
         enclosedSubsegment = seg
         subsegOrg = org
         subsegDest = dest
     }
 
-    var enclosedSubsegment: Triangle.EncodedSubsegment
+    var enclosedSubsegment: OrientedSubsegment
     var subsegOrg: Vertex, subsegDest: Vertex
 }

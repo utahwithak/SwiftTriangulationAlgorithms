@@ -54,13 +54,13 @@ class Mesh {
 
     /* Pointer to the `triangle' that occupies all of "outer space."             */
 
-    var dummytri = Triangle()
+    let dummytri = Triangle(id: -1)
 
     /* Pointer to the omnipresent subsegment.  Referenced by any triangle or     */
     /*   subsegment that isn't really connected to a subsegment at that          */
     /*   location.                                                               */
 
-    var dummysub = Subsegment()
+    let dummysub = Subsegment()
 
     /* Pointer to a recently visited triangle.  Improves point location if       */
     /*   proximate vertices are inserted sequentially.                           */
@@ -68,7 +68,7 @@ class Mesh {
     var recenttri: OrientedTriangle?
 
     func makeTriangle(b: Behavior) -> OrientedTriangle {
-        let tri = Triangle(adjoining: dummytri, subsegment: b.usesegments ? dummysub : nil)
+        let tri = Triangle(id: triangles.count, adjoining: OrientedTriangle(triangle: dummytri, orient: 0), subsegment: b.usesegments ? OrientedSubsegment(subseg: dummysub, orient: 0) : nil)
         for _ in 0..<eextras {
             tri.attributes.append(0)
         }
@@ -95,11 +95,11 @@ class Mesh {
         let newsubseg = Subsegment()
         /* Initialize the two adjoining subsegments to be the omnipresent */
         /*   subsegment.                                                  */
-        newsubseg.adj1 = Triangle.EncodedSubsegment(ss: dummysub, orientation: 0)
-        newsubseg.adj2 = Triangle.EncodedSubsegment(ss: dummysub, orientation: 0)
+        newsubseg.adj1 = OrientedSubsegment(subseg: dummysub, orient: 0)
+        newsubseg.adj2 = OrientedSubsegment(subseg: dummysub, orient: 0)
         /* Initialize the two adjoining triangles to be "outer space." */
-        newsubseg.t1 = Triangle.EncodedTriangle(triangle: dummytri, orientation: 0)
-        newsubseg.t2 = Triangle.EncodedTriangle(triangle: dummytri, orientation: 0)
+        newsubseg.t1 = OrientedTriangle(triangle: dummytri, orient: 0)
+        newsubseg.t2 = OrientedTriangle(triangle: dummytri, orient: 0)
         /* Set the boundary marker to zero. */
         newsubseg.marker = 0
         subsegs.append(newsubseg)
@@ -112,7 +112,7 @@ class Mesh {
         return newVertex
     }
 
-    func createbadSubSeg(seg: Triangle.EncodedSubsegment, org: Vertex, dest: Vertex) -> BadSubsegment {
+    func createbadSubSeg(seg: OrientedSubsegment, org: Vertex, dest: Vertex) -> BadSubsegment {
         let newsubseg = BadSubsegment(seg: seg, org: org, dest: dest)
         badSubsegs.append(newsubseg)
         return newsubseg

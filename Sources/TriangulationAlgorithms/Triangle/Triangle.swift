@@ -9,34 +9,27 @@
 import Foundation
 
 class Triangle {
-    struct EncodedTriangle {
-        let triangle: Triangle
-        let orientation: Int
-    }
 
-    struct EncodedSubsegment {
-        let ss: Subsegment
-        let orientation: Int
-    }
+    let id: Int
 
-    var t1: EncodedTriangle!, t2: EncodedTriangle!, t3: EncodedTriangle!
+    var t1: OrientedTriangle!, t2: OrientedTriangle!, t3: OrientedTriangle!
     var v1: Vertex?, v2: Vertex?, v3: Vertex?
 
-    var s1: EncodedSubsegment!, s2: EncodedSubsegment!, s3: EncodedSubsegment!
+    var s1: OrientedSubsegment!, s2: OrientedSubsegment!, s3: OrientedSubsegment!
 
     var infected = false
 
-    init() {
+    init(id: Int) {
+        self.id = id
     }
-    init(adjoining: Triangle, subsegment: Subsegment?) {
-        t1 = EncodedTriangle(triangle: adjoining, orientation: 0)
-        t2 = EncodedTriangle(triangle: adjoining, orientation: 0)
-        t3 = EncodedTriangle(triangle: adjoining, orientation: 0)
-        if let subsegment = subsegment {
-            s1 = EncodedSubsegment(ss: subsegment, orientation: 0)
-            s2 = EncodedSubsegment(ss: subsegment, orientation: 0)
-            s3 = EncodedSubsegment(ss: subsegment, orientation: 0)
-        }
+    init(id: Int, adjoining: OrientedTriangle, subsegment: OrientedSubsegment?) {
+        self.id = id
+        t1 = adjoining
+        t2 = adjoining
+        t3 = adjoining
+        s1 = subsegment
+        s2 = subsegment
+        s3 = subsegment
 
     }
 
@@ -50,6 +43,7 @@ class Triangle {
     func killTriangle() {
         t1 = nil
         t2 = nil
+        t3 = nil
         v1 = nil
         v2 = nil
         v3 = nil

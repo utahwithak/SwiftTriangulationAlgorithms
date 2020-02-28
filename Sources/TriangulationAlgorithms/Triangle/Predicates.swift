@@ -8,21 +8,21 @@
 
 import Foundation
 
-class Predicates {
+final class Predicates {
     private let epsilon: REAL, splitter: REAL, resulterrbound: REAL
     private let ccwerrboundA: REAL, ccwerrboundB: REAL, ccwerrboundC: REAL
     private let iccerrboundA: REAL, iccerrboundB: REAL, iccerrboundC: REAL
 
     // InCircleAdapt workspace:
-    var fin1 = [REAL](repeating: 0, count: 1152), fin2 = [REAL](repeating: 0, count: 1152), abdet = [REAL](repeating: 0, count: 64)
-    var axbc = [REAL](repeating: 0, count: 8), axxbc = [REAL](repeating: 0, count: 16), aybc = [REAL](repeating: 0, count: 8), ayybc = [REAL](repeating: 0, count: 16), adet = [REAL](repeating: 0, count: 32)
-    var bxca = [REAL](repeating: 0, count: 8), bxxca = [REAL](repeating: 0, count: 16), byca = [REAL](repeating: 0, count: 8), byyca = [REAL](repeating: 0, count: 16), bdet = [REAL](repeating: 0, count: 32)
-    var cxab = [REAL](repeating: 0, count: 8), cxxab = [REAL](repeating: 0, count: 16), cyab = [REAL](repeating: 0, count: 8), cyyab = [REAL](repeating: 0, count: 16), cdet  = [REAL](repeating: 0, count: 32)
+    private var fin1 = [REAL](repeating: 0, count: 1152), fin2 = [REAL](repeating: 0, count: 1152), abdet = [REAL](repeating: 0, count: 64)
+    private var axbc = [REAL](repeating: 0, count: 8), axxbc = [REAL](repeating: 0, count: 16), aybc = [REAL](repeating: 0, count: 8), ayybc = [REAL](repeating: 0, count: 16), adet = [REAL](repeating: 0, count: 32)
+    private var bxca = [REAL](repeating: 0, count: 8), bxxca = [REAL](repeating: 0, count: 16), byca = [REAL](repeating: 0, count: 8), byyca = [REAL](repeating: 0, count: 16), bdet = [REAL](repeating: 0, count: 32)
+    private var cxab = [REAL](repeating: 0, count: 8), cxxab = [REAL](repeating: 0, count: 16), cyab = [REAL](repeating: 0, count: 8), cyyab = [REAL](repeating: 0, count: 16), cdet  = [REAL](repeating: 0, count: 32)
 
-    var temp8 = [REAL](repeating: 0, count: 8), temp16a = [REAL](repeating: 0, count: 16), temp16b = [REAL](repeating: 0, count: 16), temp16c = [REAL](repeating: 0, count: 16)
-    var temp32a  = [REAL](repeating: 0, count: 32), temp32b  = [REAL](repeating: 0, count: 32), temp48  = [REAL](repeating: 0, count: 48), temp64  = [REAL](repeating: 0, count: 64)
+    private var temp8 = [REAL](repeating: 0, count: 8), temp16a = [REAL](repeating: 0, count: 16), temp16b = [REAL](repeating: 0, count: 16), temp16c = [REAL](repeating: 0, count: 16)
+    private var temp32a  = [REAL](repeating: 0, count: 32), temp32b  = [REAL](repeating: 0, count: 32), temp48  = [REAL](repeating: 0, count: 48), temp64  = [REAL](repeating: 0, count: 64)
 
-    let exact: Bool
+    private let exact: Bool
 
     public init(exact: Bool = true) {
         self.exact = exact
@@ -139,21 +139,21 @@ class Predicates {
         return inCircle(a: pa, b: pb, c: pc, d: pd)
     }
 
-    var bc = [REAL](repeating: 0, count: 4), ca = [REAL](repeating: 0, count: 4), ab = [REAL](repeating: 0, count: 4)
-    var aa = [REAL](repeating: 0, count: 4), bb = [REAL](repeating: 0, count: 4), cc = [REAL](repeating: 0, count: 4)
-    var u = [REAL](repeating: 0, count: 5), v = [REAL](repeating: 0, count: 5)
-    var axtbctt = [REAL](repeating: 0, count: 8), aytbctt = [REAL](repeating: 0, count: 8), bxtcatt = [REAL](repeating: 0, count: 8)
-    var bytcatt = [REAL](repeating: 0, count: 8), cxtabtt = [REAL](repeating: 0, count: 8), cytabtt = [REAL](repeating: 0, count: 8)
-    var abtt = [REAL](repeating: 0, count: 4), bctt = [REAL](repeating: 0, count: 4), catt = [REAL](repeating: 0, count: 4)
-    var abt = [REAL](repeating: 0, count: 8), bct = [REAL](repeating: 0, count: 8), cat = [REAL](repeating: 0, count: 8)
-    var axtbct = [REAL](repeating: 0, count: 16), aytbct = [REAL](repeating: 0, count: 16), bxtcat = [REAL](repeating: 0, count: 16), bytcat = [REAL](repeating: 0, count: 16), cxtabt = [REAL](repeating: 0, count: 16), cytabt = [REAL](repeating: 0, count: 16)
-    var axtbb = [REAL](repeating: 0, count: 8), axtcc = [REAL](repeating: 0, count: 8), aytbb = [REAL](repeating: 0, count: 8), aytcc = [REAL](repeating: 0, count: 8)
-    var axtbblen = 0, axtcclen = 0, aytbblen = 0, aytcclen = 0
-    var bxtaa = [REAL](repeating: 0, count: 8), bxtcc = [REAL](repeating: 0, count: 8), bytaa = [REAL](repeating: 0, count: 8), bytcc = [REAL](repeating: 0, count: 8)
-    var bxtaalen = 0, bxtcclen = 0, bytaalen = 0, bytcclen = 0
-    var cxtaa = [REAL](repeating: 0, count: 8), cxtbb = [REAL](repeating: 0, count: 8), cytaa = [REAL](repeating: 0, count: 8), cytbb = [REAL](repeating: 0, count: 8)
-    var cxtaalen = 0, cxtbblen = 0, cytaalen = 0, cytbblen = 0
-    var axtbc = [REAL](repeating: 0, count: 8), aytbc = [REAL](repeating: 0, count: 8), bxtca = [REAL](repeating: 0, count: 8), bytca = [REAL](repeating: 0, count: 8), cxtab = [REAL](repeating: 0, count: 8), cytab = [REAL](repeating: 0, count: 8)
+    private var bc = [REAL](repeating: 0, count: 4), ca = [REAL](repeating: 0, count: 4), ab = [REAL](repeating: 0, count: 4)
+    private var aa = [REAL](repeating: 0, count: 4), bb = [REAL](repeating: 0, count: 4), cc = [REAL](repeating: 0, count: 4)
+    private var u = [REAL](repeating: 0, count: 5), v = [REAL](repeating: 0, count: 5)
+    private var axtbctt = [REAL](repeating: 0, count: 8), aytbctt = [REAL](repeating: 0, count: 8), bxtcatt = [REAL](repeating: 0, count: 8)
+    private var bytcatt = [REAL](repeating: 0, count: 8), cxtabtt = [REAL](repeating: 0, count: 8), cytabtt = [REAL](repeating: 0, count: 8)
+    private var abtt = [REAL](repeating: 0, count: 4), bctt = [REAL](repeating: 0, count: 4), catt = [REAL](repeating: 0, count: 4)
+    private var abt = [REAL](repeating: 0, count: 8), bct = [REAL](repeating: 0, count: 8), cat = [REAL](repeating: 0, count: 8)
+    private var axtbct = [REAL](repeating: 0, count: 16), aytbct = [REAL](repeating: 0, count: 16), bxtcat = [REAL](repeating: 0, count: 16), bytcat = [REAL](repeating: 0, count: 16), cxtabt = [REAL](repeating: 0, count: 16), cytabt = [REAL](repeating: 0, count: 16)
+    private var axtbb = [REAL](repeating: 0, count: 8), axtcc = [REAL](repeating: 0, count: 8), aytbb = [REAL](repeating: 0, count: 8), aytcc = [REAL](repeating: 0, count: 8)
+    private var axtbblen = 0, axtcclen = 0, aytbblen = 0, aytcclen = 0
+    private var bxtaa = [REAL](repeating: 0, count: 8), bxtcc = [REAL](repeating: 0, count: 8), bytaa = [REAL](repeating: 0, count: 8), bytcc = [REAL](repeating: 0, count: 8)
+    private var bxtaalen = 0, bxtcclen = 0, bytaalen = 0, bytcclen = 0
+    private var cxtaa = [REAL](repeating: 0, count: 8), cxtbb = [REAL](repeating: 0, count: 8), cytaa = [REAL](repeating: 0, count: 8), cytbb = [REAL](repeating: 0, count: 8)
+    private var cxtaalen = 0, cxtbblen = 0, cytaalen = 0, cytbblen = 0
+    private var axtbc = [REAL](repeating: 0, count: 8), aytbc = [REAL](repeating: 0, count: 8), bxtca = [REAL](repeating: 0, count: 8), bytca = [REAL](repeating: 0, count: 8), cxtab = [REAL](repeating: 0, count: 8), cytab = [REAL](repeating: 0, count: 8)
     private func inCircleAdapt(pa: Vector2, pb: Vector2, pc: Vector2, pd: Vector2, permanent: REAL) -> REAL {
 
         var adx: REAL = 0, bdx: REAL = 0, cdx: REAL = 0, ady: REAL = 0, bdy: REAL = 0, cdy: REAL = 0
