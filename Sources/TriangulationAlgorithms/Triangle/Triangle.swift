@@ -42,8 +42,6 @@ class Triangle {
 
     var attributes = [REAL]()
     var area: REAL = 0
-    var nodes = [Vertex]()
-    var nextTri0: Triangle?, nextTri1: Triangle?, nextTri2: Triangle?
 
     var isDead: Bool {
         return t2 == nil
@@ -58,9 +56,7 @@ class Triangle {
         s1 = nil
         s2 = nil
         s3 = nil
-        nextTri0 = nil
-        nextTri1 = nil
-        nextTri2 = nil
+
     }
 
 }

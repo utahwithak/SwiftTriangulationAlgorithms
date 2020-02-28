@@ -25,4 +25,6 @@ public struct Behavior {
     var steiner = 0
     var minangle: REAL = 0, goodangle: REAL = 0, offconstant: REAL = 0
     var maxarea: REAL = 0
+
+    var selfCheck = false
 }

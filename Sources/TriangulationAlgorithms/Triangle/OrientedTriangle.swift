@@ -8,7 +8,7 @@
 
 import Foundation
 
-class OrientedTriangle {
+struct OrientedTriangle {
 
     init(triangle: Triangle, orient: Int) {
         self.triangle = triangle
@@ -74,7 +74,7 @@ class OrientedTriangle {
         set { set(vertex: newValue, at: orient) }
     }
 
-    func copy(to otri2: OrientedTriangle) {
+    func copy(to otri2: inout OrientedTriangle) {
         otri2.triangle = triangle
         otri2.orient = orient
     }
@@ -109,15 +109,15 @@ class OrientedTriangle {
         }
     }
 
-    func lprevself() {
+    mutating func lprevself() {
         orient = minus1mod3[orient]
     }
 
-    func lnextself() {
+    mutating func lnextself() {
         orient = plus1mod3[orient]
     }
 
-    func lprev(on otri2: OrientedTriangle) {
+    func lprev(on otri2: inout OrientedTriangle) {
         otri2.triangle = triangle
         otri2.orient = minus1mod3[orient]
     }
@@ -126,7 +126,7 @@ class OrientedTriangle {
         return OrientedTriangle(triangle: triangle, orient: minus1mod3[orient])
     }
 
-    func lnext(on otri2: OrientedTriangle) {
+    func lnext(on otri2: inout OrientedTriangle) {
         otri2.triangle = triangle
         otri2.orient = plus1mod3[orient]
     }
@@ -135,11 +135,11 @@ class OrientedTriangle {
     }
 
     func onext() -> OrientedTriangle {
-        let prev = lprev()
+        var prev = lprev()
         prev.symself()
         return prev
     }
-    func onextself() {
+    mutating func onextself() {
         lprevself()
         symself()
     }
@@ -159,20 +159,20 @@ class OrientedTriangle {
     }
 
     func oprev() -> OrientedTriangle {
-        let otri2 = sym()
+        var otri2 = sym()
         otri2.lnextself()
         return otri2
     }
 
-    func oprev(to otri2: OrientedTriangle) {
-        sym(to: otri2)
+    func oprev(to otri2: inout OrientedTriangle) {
+        sym(to: &otri2)
         otri2.lnextself()
     }
-    func oprevself() {
+    mutating func oprevself() {
         symself()
         lnextself()
     }
-    func dnextself() {
+    mutating func dnextself() {
         symself()
         lprevself()
     }
@@ -196,7 +196,7 @@ class OrientedTriangle {
         }
     }
 
-    func symself() {
+    mutating func symself() {
         let ptr: Triangle.EncodedTriangle
         switch orient {
         case 0:
@@ -213,7 +213,7 @@ class OrientedTriangle {
     /*   direction is necessarily reversed, because the handle specified by an   */
     /*   oriented triangle is directed counterclockwise around the triangle.     */
 
-    func sym(to otri2: OrientedTriangle) {
+    func sym(to otri2: inout OrientedTriangle) {
         let ptr: Triangle.EncodedTriangle
         switch orient {
         case 0:
@@ -239,7 +239,7 @@ class OrientedTriangle {
         return OrientedTriangle(triangle: ptr.triangle, orient: ptr.orientation)
     }
 
-    func decode(triangle: Triangle.EncodedTriangle) {
+    mutating func decode(triangle: Triangle.EncodedTriangle) {
         self.triangle = triangle.triangle
         orient = triangle.orientation
     }
