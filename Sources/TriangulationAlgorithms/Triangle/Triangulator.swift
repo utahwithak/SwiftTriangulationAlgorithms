@@ -1335,8 +1335,8 @@ public struct Triangulator {
 
         }
         var sampletri = OrientedTriangle(triangle: searchtri.triangle, orient: 0)
-        for triange in m.triangles {
-            sampletri.triangle = triange
+        for triangle in m.triangles where !triangle.isDead {
+            sampletri.triangle = triangle
             torg = sampletri.org!
             let dist = (searchpoint.x - torg.x) * (searchpoint.x - torg.x) + (searchpoint.y - torg.y) * (searchpoint.y - torg.y)
             if dist < searchdist {
