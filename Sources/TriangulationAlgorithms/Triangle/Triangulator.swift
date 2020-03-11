@@ -203,7 +203,7 @@ public struct Triangulator {
         /* Allocate memory for output triangles if necessary. */
         trianglelist.removeAll(keepingCapacity: true)
 
-        for triangle in m.triangles {
+        for triangle in m.triangles where !triangle.isDead {
             let triangleloop = OrientedTriangle(triangle: triangle, orient: 0)
 
             let p1 = triangleloop.org!

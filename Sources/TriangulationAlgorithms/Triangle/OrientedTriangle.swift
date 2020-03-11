@@ -9,7 +9,7 @@
 import Foundation
 
 struct OrientedTriangle {
-    var triangle: Triangle
+    unowned var triangle: Triangle
     var orientation: Int
 
     var id: Int {

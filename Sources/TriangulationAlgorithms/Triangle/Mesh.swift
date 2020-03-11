@@ -82,12 +82,12 @@ class Mesh {
 
     func killTriangle(triangle: Triangle) {
         triangle.killTriangle()
-        triangles.removeAll(where: { $0 === triangle })
+//        triangles.removeAll(where: { $0 === triangle })
     }
 
     func killSubseg(subseg: Subsegment) {
         subseg.kill()
-        subsegs.removeAll(where: { $0 === subseg })
+//        subsegs.removeAll(where: { $0 === subseg })
     }
 
     func makesubseg() -> OrientedSubsegment {

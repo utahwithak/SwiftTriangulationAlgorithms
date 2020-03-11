@@ -13,7 +13,7 @@ class Triangle {
     let id: Int
 
     var t1: OrientedTriangle!, t2: OrientedTriangle!, t3: OrientedTriangle!
-    var v1: Vertex?, v2: Vertex?, v3: Vertex?
+    unowned var v1: Vertex?, v2: Vertex?, v3: Vertex?
 
     var s1: OrientedSubsegment!, s2: OrientedSubsegment!, s3: OrientedSubsegment!
 
