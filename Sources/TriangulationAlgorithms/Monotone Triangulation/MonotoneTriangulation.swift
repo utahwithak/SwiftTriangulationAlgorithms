@@ -101,13 +101,18 @@ public struct MonotonePolygonAlgorithm {
     }
 
     private static func sideOfPoints(a: Vertex, center b: Vertex, andEnd c: Vertex) -> Int {
-        let v1x = b.x-a.x
-        let v1y = b.y-a.y
+        let v1x = b.x - a.x
+        let v1y = b.y - a.y
 
-        let v2x = c.x-b.x
-        let v2y = c.y-b.y
+        let v2x = c.x - b.x
+        let v2y = c.y - b.y
 
-        return (v1x * v2y) - (v1y * v2x) < 0 ? -1 : 1
+        let det = (v1x * v2y) - (v1y * v2x)
+        if det < 0.00001 && det > -0.00001 {
+            return 0
+        }
+
+        return det < 0 ? -1 : 1
     }
 
     static func sequenceStarting(at startEdge: Edge, in polygon: Polygon, sequence: inout [MonotonePolygonAlgorithm.Vertex], highest: inout Edge, lowest: inout Edge) {

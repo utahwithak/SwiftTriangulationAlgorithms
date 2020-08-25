@@ -16,16 +16,16 @@ public struct EarClippingAlgorithm {
     }
 
     public mutating func triangulate() -> [Int] {
-        var indexes = [Int]()
-        indexes.reserveCapacity(points.count * 3)
+        var triangles = [Int]()
+        triangles.reserveCapacity(points.count * 3)
 
         let n = points.count
         if n < 3 {
-            return indexes
+            return triangles
         }
 
         var V = [Int](repeating: 0, count: n)
-        if area > 0 {
+        if area < 0 {
             for v in 0..<n {
                 V[v] = v
             }
@@ -41,7 +41,7 @@ public struct EarClippingAlgorithm {
         while remainingPoints > 2 {
             count -= 1
             if count <= 0 {
-                return indexes
+                return triangles
             }
 
             let u = remainingPoints <= v ? 0 : v
@@ -59,9 +59,9 @@ public struct EarClippingAlgorithm {
                 let a = V[u]
                 let b = V[v]
                 let c = V[w]
-                indexes.append(a)
-                indexes.append(b)
-                indexes.append(c)
+                triangles.append(a)
+                triangles.append(b)
+                triangles.append(c)
                 m += 1
                 for t in (v + 1)..<remainingPoints {
                     V[t - 1] = V[t]
@@ -71,7 +71,7 @@ public struct EarClippingAlgorithm {
             }
         }
 
-        return indexes
+        return triangles
     }
 
     private var area: CGFloat {

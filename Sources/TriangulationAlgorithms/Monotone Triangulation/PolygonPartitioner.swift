@@ -104,10 +104,10 @@ struct PolygonPartitioner {
     }
 
     private func helperFor(edge: Edge) throws -> MonotonePolygonAlgorithm.Vertex {
-        guard let edge = helperMap[edge] else {
+        guard let vert = helperMap[edge] else {
             throw TriangulationError.InvalidPolygon
         }
-        return edge
+        return vert
     }
 
     private mutating func remove(edge: Edge) {
